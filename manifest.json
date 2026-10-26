@@ -1,0 +1,20 @@
+{
+	"manifest_version": 2,
+	"name": "Zotero ChatGPT Sidebar",
+	"version": "1.6.2",
+	"description": "在 Zotero 右侧栏内嵌 ChatGPT 网页版：划词直接把选中文字送进当前对话，点面板标题栏的纸飞机按钮把当前论文 PDF 送进对话（不切页），条目一键提问。",
+	"author": "WorkBuddy",
+	"homepage_url": "https://github.com/",
+	"icons": {
+		"48": "content/icons/icon-48.png",
+		"96": "content/icons/icon-96.png"
+	},
+	"applications": {
+		"zotero": {
+			"id": "zoterogpt-sidebar@workbuddy.local",
+			"update_url": "https://raw.githubusercontent.com/baijiyunze/zotero-chatgpt-sidebar/main/update.json",
+			"strict_min_version": "7.0",
+			"strict_max_version": "10.*"
+		}
+	}
+}

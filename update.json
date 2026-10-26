@@ -1,0 +1,19 @@
+{
+  "addons": {
+    "zoterogpt-sidebar@workbuddy.local": {
+      "updates": [
+        {
+          "version": "1.6.2",
+          "update_link": "https://github.com/baijiyunze/zotero-chatgpt-sidebar/releases/download/v1.6.2/zotero-chatgpt-sidebar-1.6.2.xpi",
+          "update_hash": "sha256:c4bdbc9f22378412b655c0188549204a561194f7a1147fb6721f6a1ca9aac9ba",
+          "applications": {
+            "zotero": {
+              "strict_min_version": "7.0",
+              "strict_max_version": "10.*"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

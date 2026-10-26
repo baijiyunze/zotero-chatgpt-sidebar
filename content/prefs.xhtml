@@ -1,0 +1,111 @@
+<vbox id="zoterogpt-prefpane" xmlns:html="http://www.w3.org/1999/xhtml" onload="Zotero.ZoteroChatGPTSidebar &amp;&amp; Zotero.ZoteroChatGPTSidebar.initPrefPane(window)">
+
+	<groupbox>
+		<label><html:h2>ChatGPT 侧边栏 / ChatGPT Sidebar</html:h2></label>
+		<description>在 Zotero 右侧栏内嵌 ChatGPT 网页版。在 PDF 里划词后点「发送到 ChatGPT」，选中的文字会直接发到面板里当前打开的对话里；点插件面板标题栏的纸飞机按钮，可把当前论文的 PDF 送进对话，全程不离开论文页。</description>
+	</groupbox>
+
+	<groupbox>
+		<label><html:h2>面板设置 / Panel</html:h2></label>
+
+		<hbox align="center">
+			<label value="ChatGPT 网址 / URL" control="zsc-pref-chatUrl"/>
+			<html:input id="zsc-pref-chatUrl" type="text" dir="ltr"
+				data-zsc-pref="chatUrl" data-zsc-type="string"
+				preference="extensions.zoterogpt.chatUrl"
+				style="flex: 1; min-width: 18em;"/>
+		</hbox>
+		<description>默认 https://chatgpt.com/ ；可改成自建/镜像站点。</description>
+
+		<hbox align="center">
+			<label value="面板高度(px) / Height" control="zsc-pref-panelHeight"/>
+			<html:input id="zsc-pref-panelHeight" type="number" min="180" max="1600" style="width: 6em;"
+				data-zsc-pref="panelHeight" data-zsc-type="int"
+				preference="extensions.zoterogpt.panelHeight"/>
+			<label value="单次发送上限字符 / Max chars" control="zsc-pref-maxChars"/>
+			<html:input id="zsc-pref-maxChars" type="number" min="200" max="20000" style="width: 6em;"
+				data-zsc-pref="maxChars" data-zsc-type="int"
+				preference="extensions.zoterogpt.maxChars"/>
+		</hbox>
+
+		<vbox>
+			<checkbox id="zsc-pref-fill" label="面板铺满侧边栏（自动量取可用高度，不留白）"
+				native="true"
+				data-zsc-pref="fillSidebar" data-zsc-type="bool"
+				preference="extensions.zoterogpt.fillSidebar"/>
+		</vbox>
+		<description>勾选「铺满」时忽略上面的高度值；拖拽面板底部会关闭铺满并回到固定高度。内嵌网页缩放由偏好 extensions.zoterogpt.zoom 控制（在 about:config 里改，例如 0.8），每次加载自动应用。</description>
+
+		<hbox align="center">
+			<label value="字体大小 / Zoom" control="zsc-pref-zoom-val"/>
+			<html:button id="zsc-pref-zoom-out" data-zsc-zoom="out" type="button"
+				title="缩小 10%" style="min-width:3em;">A−</html:button>
+			<html:input id="zsc-pref-zoom-val" data-zsc-zoom="value" type="text" readonly="readonly"
+				style="width:4em;text-align:center;"/>
+			<html:button id="zsc-pref-zoom-in" data-zsc-zoom="in" type="button"
+				title="放大 10%" style="min-width:3em;">A+</html:button>
+			<html:button id="zsc-pref-zoom-reset" data-zsc-zoom="reset" type="button"
+				title="恢复 100%">重置</html:button>
+		</hbox>
+		<description>立即生效，范围 50%–200%（该值会记住）。侧边栏面板标题栏上也有 A− / A+ 两个按钮，可以随时调。</description>
+
+		<hbox align="center">
+			<label value="发送方式 / Send mode" control="zsc-pref-sendMode"/>
+			<radiogroup id="zsc-pref-sendMode" orient="horizontal"
+				data-zsc-pref="sendMode" data-zsc-type="string"
+				preference="extensions.zoterogpt.sendMode">
+				<radio label="直接发到面板里当前打开的对话" value="current"/>
+				<radio label="只复制到剪贴板，手动粘贴" value="clipboard"/>
+			</radiogroup>
+		</hbox>
+
+		<vbox>
+			<checkbox id="zsc-pref-prefer-current" label="优先送进当前对话（绝不新开对话；关掉才用 ?q= 新开对话发送）"
+				native="true"
+				data-zsc-pref="preferCurrentChat" data-zsc-type="bool"
+				preference="extensions.zoterogpt.preferCurrentChat"/>
+			<checkbox id="zsc-pref-toast" label="发送后弹出提示"
+				native="true"
+				data-zsc-pref="toastOnSend" data-zsc-type="bool"
+				preference="extensions.zoterogpt.toastOnSend"/>
+		</vbox>
+	</groupbox>
+
+	<groupbox>
+		<label><html:h2>内嵌网页兼容性 / Embedding</html:h2></label>
+		<description>chatgpt.com 会用 X-Frame-Options / CSP frame-ancestors 禁止被网页框架嵌入。开启下面的开关后，插件会在响应阶段剥离这两个限制，使网页能显示在右侧栏里（仅对 ChatGPT 相关域名生效）。</description>
+		<checkbox id="zsc-pref-strip" label="剥离 X-Frame-Options 与 CSP frame-ancestors（推荐开启）"
+			native="true"
+			data-zsc-pref="stripFrameHeaders" data-zsc-type="bool"
+			preference="extensions.zoterogpt.stripFrameHeaders"/>
+		<checkbox id="zsc-pref-ua-toggle" label="用普通浏览器 User-Agent 访问（规避 Cloudflare 风控，推荐开启）"
+			native="true"
+			data-zsc-pref="plainUserAgent" data-zsc-type="bool"
+			preference="extensions.zoterogpt.plainUserAgent"/>
+		<hbox align="center">
+			<label value="自定义 UA（留空则自动去掉 Zotero/x.y 后缀）" control="zsc-pref-ua"/>
+			<html:input id="zsc-pref-ua" type="text" dir="ltr" style="flex: 1;"
+				data-zsc-pref="customUserAgent" data-zsc-type="string"
+				preference="extensions.zoterogpt.customUserAgent"/>
+		</hbox>
+		<description>示例：Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0</description>
+	</groupbox>
+
+	<groupbox>
+		<label><html:h2>使用 / Usage</html:h2></label>
+		<hbox>
+			<button id="zsc-pref-open" label="打开 ChatGPT 侧边栏"
+				oncommand="Zotero.ZoteroChatGPTSidebar &amp;&amp; Zotero.ZoteroChatGPTSidebar.openPanel()"/>
+		</hbox>
+		<description>1) 打开右侧栏的 ChatGPT 侧边栏，在弹出的 ChatGPT 页面里登录你的账号（登录状态随 Zotero 配置文件保存）。
+2) 在 PDF 里划词，弹窗中会出现「发送到 ChatGPT」按钮；点一下，选中的文字就直接发到面板里当前那个对话里，不会再新开对话、也不会跳回文库页面。
+3) 把整篇论文送进对话（PDF 直接进 ChatGPT 输入框，等文件卡片出现后按回车发送），整篇一次性交给模型，便于逐句追问。三种入口（**都需手动点按钮，不会自动发送**）：
+   · 插件面板标题栏右侧的纸飞机按钮（点一下就发）；
+   · 正文右键菜单 / 条目列表右键里的「把这篇论文的 PDF 发到…」。
+   发送过程**不切标签页、不弹阅读器侧栏、不新开对话**，论文停在哪一页就还在哪一页。
+4) PDF 正文右键菜单里也有同一个划词动作。
+5) 条目列表右键 → 用 ChatGPT 总结所选文献 / 生成阅读问题 / 把这篇论文的 PDF 发到 ChatGPT 侧边栏。
+6) 若侧边栏加载失败，可点面板里的 ↗ 用系统浏览器打开同一页面。</description>
+	</groupbox>
+
+</vbox>
