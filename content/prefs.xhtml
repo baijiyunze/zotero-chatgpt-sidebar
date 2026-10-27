@@ -9,13 +9,15 @@
 		<label><html:h2>面板设置 / Panel</html:h2></label>
 
 		<hbox align="center">
-			<label value="ChatGPT 网址 / URL" control="zsc-pref-chatUrl"/>
-			<html:input id="zsc-pref-chatUrl" type="text" dir="ltr"
-				data-zsc-pref="chatUrl" data-zsc-type="string"
-				preference="extensions.zoterogpt.chatUrl"
-				style="flex: 1; min-width: 18em;"/>
+			<label value="AI 服务 / Provider" control="zsc-pref-provider"/>
+			<radiogroup id="zsc-pref-provider" orient="horizontal"
+				data-zsc-pref="provider" data-zsc-type="string"
+				preference="extensions.zoterogpt.provider">
+				<radio label="ChatGPT" value="chatgpt"/>
+				<radio label="DeepSeek" value="deepseek"/>
+			</radiogroup>
 		</hbox>
-		<description>默认 https://chatgpt.com/ ；可改成自建/镜像站点。</description>
+		<description>切换后侧边栏会自动载入对应站点。两边的登录状态互相独立，各登录一次即可，都会记住。</description>
 
 		<hbox align="center">
 			<label value="面板高度(px) / Height" control="zsc-pref-panelHeight"/>

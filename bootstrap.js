@@ -35,18 +35,103 @@ function zscIconURL(name, rootURI) {
 	return (rootURI || ZSC.rootURI) + "content/icons/" + name + "?v=" + ZSC_ICONS_REV;
 }
 
-// 需要剥离帧限制 / 覆盖 UA 的域名（含登录相关域名）
-const ZSC_CHAT_HOSTS = [
-	"chatgpt.com",
-	"chat.openai.com",
-	"openai.com",
-	"auth.openai.com",
-	"auth0.openai.com",
-	"accounts.google.com",
-	"appleid.apple.com",
-	"login.microsoftonline.com",
-	"login.live.com",
-];
+// 支持的内置 AI 服务。差异全部集中在这张表里，页面脚本按配置动态生成。
+//  - hosts        : 需要剥离 X-Frame-Options / CSP 的域名（含登录相关域名）
+//  - composer/send: 输入框与发送按钮的选择器（按优先级从上到下试）
+//  - preferEnter  : true = 优先回车发送（DeepSeek），false = 优先点发送按钮（ChatGPT）
+const ZSC_PROVIDERS = {
+	chatgpt: {
+		id: "chatgpt",
+		label: "ChatGPT",
+		url: "https://chatgpt.com/",
+		hosts: [
+			"chatgpt.com",
+			"chat.openai.com",
+			"openai.com",
+			"auth.openai.com",
+			"auth0.openai.com",
+			"accounts.google.com",
+			"appleid.apple.com",
+			"login.microsoftonline.com",
+			"login.live.com",
+		],
+		cookieHost: "chatgpt.com",
+		sessionCookie: "session-token|oai-client-auth|__Secure-next-auth|oai-did|_account",
+		composer: [
+			"#prompt-textarea",
+			"div.ProseMirror[contenteditable=\"true\"]",
+			"div[contenteditable=\"true\"]",
+			"textarea[data-id]",
+			"textarea",
+		],
+		send: [
+			"button[data-testid=\"send-button\"]",
+			"#composer-submit-button",
+			"button[aria-label*=\"Send\"]",
+			"button[aria-label*=\"发送\"]",
+			"button.composer-submit-button-color",
+		],
+		preferEnter: false,
+	},
+	deepseek: {
+		id: "deepseek",
+		label: "DeepSeek",
+		url: "https://chat.deepseek.com/",
+		hosts: [
+			"chat.deepseek.com",
+			"deepseek.com",
+			"platform.deepseek.com",
+			"open.weixin.qq.com",
+		],
+		cookieHost: "chat.deepseek.com",
+		sessionCookie: "token|session|auth|user|ds_|login",
+		// DeepSeek 输入框是普通 textarea，但被 React 接管，写入必须走原生 setter
+		composer: ["#chat-input", "textarea#chat-input", "textarea"],
+		// 发送按钮只认能明确识别的，找不到就交给回车；
+		// 页面上还有「深度思考 / 联网搜索」等开关，绝不能用 div[role=button] 兜底乱点。
+		send: [
+			"button[type=\"submit\"]",
+			"div[aria-label*=\"发送\"]",
+			"button[aria-label*=\"发送\"]",
+			"div[aria-label*=\"Send\"]",
+			"button[aria-label*=\"Send\"]",
+		],
+		preferEnter: true,
+	},
+};
+
+/** 当前选中的服务（偏好 extensions.zoterogpt.provider，默认 chatgpt） */
+function zscProv() {
+	let id = String(zscGetPref("provider", "chatgpt") || "chatgpt").trim().toLowerCase();
+	return Object.prototype.hasOwnProperty.call(ZSC_PROVIDERS, id)
+		? ZSC_PROVIDERS[id]
+		: ZSC_PROVIDERS.chatgpt;
+}
+
+/** host 是否属于给定域名列表（含子域） */
+function zscHostIn(host, list) {
+	if (!host) {
+		return false;
+	}
+	let h = String(host).toLowerCase();
+	for (let domain of (list || [])) {
+		if (h === domain || h.endsWith("." + domain)) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/** 所有内置站点的域名并集：响应头剥离用它，切换服务后不用重启 */
+function zscAllChatHosts() {
+	let out = [];
+	for (let key in ZSC_PROVIDERS) {
+		out = out.concat(ZSC_PROVIDERS[key].hosts || []);
+	}
+	return out;
+}
+
+const ZSC_CHAT_HOSTS = zscAllChatHosts();
 
 // 条目级快捷提问（用于条目右键菜单）。
 // 注意：划词发送不做任何包装——选中什么就发什么，所以这里没有划词模板。
@@ -401,9 +486,9 @@ function zscToast(win, message) {
 }
 
 function zscChatURL(prompt) {
-	let base = String(zscGetPref("chatUrl", "https://chatgpt.com/") || "").trim();
+	let base = String(zscProv().url || "").trim();
 	if (!base) {
-		base = "https://chatgpt.com/";
+		base = ZSC_PROVIDERS.chatgpt.url;
 	}
 	if (!prompt) {
 		return base;
@@ -523,7 +608,7 @@ async function startup({ id, version, resourceURI, rootURI }, reason) {
 		Zotero.PreferencePanes.register({
 			pluginID: ZSC_ID,
 			src: "content/prefs.xhtml",
-			label: "ChatGPT 侧边栏",
+			label: "AI 侧边栏",
 			image: zscIconURL("section-20.svg", rootURI),
 		});
 	}
@@ -958,32 +1043,40 @@ function zscTranslatorHeader(label, translatorID) {
  * translator 代码一起注入网页，代码里就能直接操作该页 DOM。
  */
 function zscInjectCode(text) {
-	return zscTranslatorHeader("Zotero ChatGPT Sidebar - Inject").concat([
+	let prov = zscProv();
+	return zscTranslatorHeader("Zotero AI Sidebar - Inject").concat([
 		'function detectWeb(doc, url) { return "webpage"; }',
 		'',
 		'function doWeb(doc, url) {',
 		'	var say = function (m) { try { Zotero.debug("ZSC:" + m); } catch (e) {} };',
 		'	var W = doc.defaultView;',
 		'	var sleep = function (ms) { return new Promise(function (r) { W.setTimeout(r, ms); }); };',
+		'	var COMPOSER_SEL = ' + JSON.stringify(prov.composer) + ';',
+		'	var SEND_SEL = ' + JSON.stringify(prov.send) + ';',
+		'	var PREFER_ENTER = ' + JSON.stringify(!!prov.preferEnter) + ';',
+		'',
 		'	var findComposer = function () {',
-		'		var sels = ["#prompt-textarea", "div.ProseMirror[contenteditable=\\"true\\"]",',
-		'			"div[contenteditable=\\"true\\"]", "textarea[data-id]", "textarea"];',
-		'		for (var i = 0; i < sels.length; i++) {',
-		'			var el = doc.querySelector(sels[i]);',
+		'		for (var i = 0; i < COMPOSER_SEL.length; i++) {',
+		'			var el = doc.querySelector(COMPOSER_SEL[i]);',
 		'			if (el) { return el; }',
 		'		}',
 		'		return null;',
 		'	};',
+		'',
 		'	var findSend = function () {',
-		'		var sels = ["button[data-testid=\\"send-button\\"]", "#composer-submit-button",',
-		'			"button[aria-label*=\\"Send\\"]", "button[aria-label*=\\"\\u53d1\\u9001\\"]",',
-		'			"button.composer-submit-button-color"];',
-		'		for (var i = 0; i < sels.length; i++) {',
-		'			var el = doc.querySelector(sels[i]);',
-		'			if (el) { return el; }',
+		'		for (var i = 0; i < SEND_SEL.length; i++) {',
+		'			var list = [];',
+		'			try { list = Array.prototype.slice.call(doc.querySelectorAll(SEND_SEL[i])); } catch (e) {}',
+		'			for (var j = list.length - 1; j >= 0; j--) {',
+		'				var el = list[j];',
+		'				if (!el || el.disabled) { continue; }',
+		'				if (String(el.getAttribute("aria-disabled") || "") === "true") { continue; }',
+		'				return el;',
+		'			}',
 		'		}',
 		'		return null;',
 		'	};',
+		'',
 		'	var val = function (el) {',
 		'		try {',
 		'			if (typeof el.value === "string") { return el.value; }',
@@ -996,9 +1089,9 @@ function zscInjectCode(text) {
 		'		catch (e) { return false; }',
 		'	};',
 		'',
-		'	// 把插入点放到输入框的末尾。',
-		'	// 千万不要用 document.execCommand("selectAll")：在 contenteditable 里它可能',
-		'	// 选中整页内容，随后的 insertText 会把整个页面替换掉。',
+		'	// 把插入点放到输入框末尾。',
+		'	// 不要用 document.execCommand("selectAll")：在 contenteditable 里可能选中整页，',
+		'	// 随后的 insertText 会把整个页面替换掉。',
 		'	var putCaretAtEnd = function (ed) {',
 		'		try {',
 		'			if (isEditable(ed)) {',
@@ -1020,8 +1113,7 @@ function zscInjectCode(text) {
 		'		return false;',
 		'	};',
 		'',
-		'	// 给 <textarea> 用的兜底写入：直接调原生 setter 再抛 input 事件，',
-		'	// 让 React 的受控组件同步到新值。',
+		'	// <textarea> 兜底写入：调原生 setter 再抛 input 事件，让 React 受控组件同步',
 		'	var setTextareaValue = function (ed, text) {',
 		'		try {',
 		'			var proto = W.HTMLTextAreaElement && W.HTMLTextAreaElement.prototype;',
@@ -1034,7 +1126,7 @@ function zscInjectCode(text) {
 		'		catch (e) { say("TEXTAREA_ERR " + e); return false; }',
 		'	};',
 		'',
-		'	// 给 contenteditable 用的兜底写入：整段替换 + input 事件',
+		'	// contenteditable 兜底写入：整段替换 + input 事件',
 		'	var setEditableValue = function (ed, text) {',
 		'		try {',
 		'			ed.focus();',
@@ -1049,6 +1141,18 @@ function zscInjectCode(text) {
 		'		catch (e) { say("EDITABLE_ERR " + e); return false; }',
 		'	};',
 		'',
+		'	var pressEnter = async function (ed) {',
+		'		var o = { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true, cancelable: true };',
+		'		try {',
+		'			ed.dispatchEvent(new W.KeyboardEvent("keydown", o));',
+		'			ed.dispatchEvent(new W.KeyboardEvent("keypress", o));',
+		'			ed.dispatchEvent(new W.KeyboardEvent("keyup", o));',
+		'		}',
+		'		catch (e) { say("ENTER_ERR " + e); }',
+		'		await sleep(500);',
+		'		return String(val(ed)).length === 0;',
+		'	};',
+		'',
 		'	var main = async function () {',
 		'		var payload = ' + JSON.stringify(text) + ';',
 		'		var probe = payload.slice(0, 40);',
@@ -1057,8 +1161,7 @@ function zscInjectCode(text) {
 		'		var editable = isEditable(ed);',
 		'		say("COMPOSER " + ed.tagName + " id=" + (ed.id || "-") + " editable=" + editable);',
 		'		try { ed.focus(); } catch (e) {}',
-		'		// 刻意不清空输入框：万一用户自己打了一半草稿，清掉就是数据丢失。',
-		'		// 位置放末尾追加，用户自己删改即可。',
+		'		// 刻意不清空输入框：用户可能打了一半草稿，清掉就是数据丢失。追加到末尾，用户自行删改。',
 		'		say("BEFORE len=" + String(val(ed)).length);',
 		'		putCaretAtEnd(ed);',
 		'		var ok = false;',
@@ -1074,35 +1177,38 @@ function zscInjectCode(text) {
 		'			return;',
 		'		}',
 		'		say("INSERTED len=" + payload.length);',
-		'		// 等 React/ProseMirror 把状态刷完、发送按钮变可点',
+		'',
+		'		// 等 React 把状态刷完、发送按钮从禁用变可用',
 		'		var btn = null;',
-		'		for (var i = 0; i < 40; i++) {',
+		'		for (var i = 0; i < 30; i++) {',
 		'			await sleep(100);',
 		'			btn = findSend();',
-		'			if (btn && !btn.disabled) { break; }',
-		'			btn = null;',
+		'			if (btn) { break; }',
+		'		}',
+		'',
+		'		if (PREFER_ENTER) {',
+		'			say("TRY_ENTER");',
+		'			if (await pressEnter(ed)) { say("SENT_ENTER"); return; }',
 		'		}',
 		'		if (btn) {',
 		'			try {',
 		'				btn.click();',
 		'				await sleep(400);',
 		'				if (String(val(ed)).length === 0) { say("SENT_BUTTON"); return; }',
-		'				// 输入框还在内容：可能是 React 还没处理完（随后才清空）。',
-		'				// 再等 1.2s 二次确认，避免"其实已发出"时又补回车造成重复发送。',
+		'				// 输入框还有内容：可能 React 还没清空。再等 1.2s 二次确认，',
+		'				// 避免"其实已发出"时又补回车造成重复发送。',
 		'				await sleep(1200);',
 		'				if (String(val(ed)).length === 0) { say("SENT_BUTTON_SLOW"); return; }',
 		'				say("SENT_BUTTON_UNCLEAR len=" + String(val(ed)).length);',
-		'				// 刻意不 return：按钮可能压根没被 React 接住，继续走下面的回车兜底',
 		'			}',
 		'			catch (e) { say("CLICK_ERR " + e); }',
 		'		}',
+		'		if (PREFER_ENTER) {',
+		'			say("SENT_UNCLEAR len=" + String(val(ed)).length);',
+		'			return;',
+		'		}',
 		'		try {',
-		'			var o = { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true, cancelable: true };',
-		'			ed.dispatchEvent(new W.KeyboardEvent("keydown", o));',
-		'			ed.dispatchEvent(new W.KeyboardEvent("keypress", o));',
-		'			ed.dispatchEvent(new W.KeyboardEvent("keyup", o));',
-		'			await sleep(400);',
-		'			if (String(val(ed)).length === 0) { say("SENT_ENTER"); return; }',
+		'			if (await pressEnter(ed)) { say("SENT_ENTER"); return; }',
 		'			say("SENT_ENTER_UNCLEAR len=" + String(val(ed)).length);',
 		'		}',
 		'		catch (e) { say("ENTER_ERR " + e); }',
@@ -1150,7 +1256,16 @@ function zscPanelOnChat(options) {
 	}
 	try {
 		let spec = panel.browser.currentURI && panel.browser.currentURI.spec || "";
-		return /^https?:\/\/([a-z0-9-]+\.)*(chatgpt\.com|openai\.com)\//i.test(spec);
+		let host = "";
+		try {
+			host = panel.browser.currentURI.host || "";
+		}
+		catch (e) { /* ignore */ }
+		if (!host) {
+			let m = String(spec).match(/^https?:\/\/([^\/:]+)/i);
+			host = m ? m[1] : "";
+		}
+		return zscHostIn(host, zscProv().hosts);
 	}
 	catch (e) {
 		return false;
@@ -1342,6 +1457,15 @@ function zscPagePrelude() {
 	return [
 		'var ZSC_SAY = function (m) { try { Zotero.debug("ZSC:" + m); } catch (e) {} };',
 		'var ZSC_STATE_KEY = "__zscPdf";',
+		'var ZSC_COMPOSER_SEL = ' + JSON.stringify(zscProv().composer) + ';',
+		'var ZSC_FIND_COMPOSER = function (doc) {',
+		'	for (var i = 0; i < ZSC_COMPOSER_SEL.length; i++) {',
+		'		var el = null;',
+		'		try { el = doc.querySelector(ZSC_COMPOSER_SEL[i]); } catch (e) {}',
+		'		if (el) { return el; }',
+		'	}',
+		'	return null;',
+		'};',
 		'',
 		'// 状态挂在页面 window 上，才能在多次注入之间保留。',
 		'// 优先挂 wrappedJSObject（绕过 Xray 的原始对象，最稳），同时挂 Xray 包装对象。',
@@ -1434,7 +1558,7 @@ function zscPagePrelude() {
 		'var ZSC_VERIFY = function (doc, name) {',
 		'	try {',
 		'		var stem = String(name || "").replace(/\\.[a-z0-9]+$/i, "");',
-		'		var node = doc.querySelector("#prompt-textarea")',
+		'		var node = ZSC_FIND_COMPOSER(doc)',
 		'			|| doc.querySelector("div.ProseMirror[contenteditable=\\"true\\"]");',
 		'		var scope = null;',
 		'		if (node) {',
@@ -1488,7 +1612,7 @@ function zscPagePrelude() {
 		'	// 输入框不让写就退回"模拟拖放"（ChatGPT 支持把文件拖到输入区）',
 		'	if (!attached) {',
 		'		try {',
-		'			var node = doc.querySelector("#prompt-textarea")',
+		'			var node = ZSC_FIND_COMPOSER(doc)',
 		'				|| doc.querySelector("div.ProseMirror[contenteditable=\\"true\\"]")',
 		'				|| doc.body;',
 		'			var target = null;',
@@ -2976,11 +3100,11 @@ function zscCookieStatus() {
 	try {
 		let enumerator = null;
 		try {
-			enumerator = Services.cookies.getCookiesFromHost("chatgpt.com", {});
+			enumerator = Services.cookies.getCookiesFromHost(zscProv().cookieHost, {});
 		}
 		catch (e) {
 			try {
-				enumerator = Services.cookies.getCookiesFromHost("chatgpt.com");
+				enumerator = Services.cookies.getCookiesFromHost(zscProv().cookieHost);
 			}
 			catch (e2) {
 				enumerator = null;
@@ -2991,7 +3115,7 @@ function zscCookieStatus() {
 				let cookie = enumerator.getNext();
 				status.count++;
 				let name = String(cookie.name || "");
-				if (/session-token|oai-client-auth|__Secure-next-auth|oai-did|_account/i.test(name)) {
+				if (new RegExp(zscProv().sessionCookie, "i").test(name)) {
 					status.session = true;
 				}
 			}
@@ -3416,6 +3540,26 @@ function registerMenus() {
 /* 偏好面板绑定 / 外部接口                                              */
 /* ------------------------------------------------------------------ */
 
+/** 切换服务后重新载入面板到该服务的站点 */
+function zscSwitchProvider() {
+	let prov = zscProv();
+	zscLog("switch provider -> " + prov.id + " " + prov.url);
+	let win = null;
+	try { win = Zotero.getMainWindow(); } catch (e) { /* ignore */ }
+	try {
+		if (ZSC && ZSC.panel && ZSC.panel.browser) {
+			zscNavigate(ZSC.panel.browser, prov.url);
+			ZSC.panel.lastURL = prov.url;
+		}
+		if (win) {
+			zscSetStatus((zscIsZh() ? "已切换到 " : "Switched to ") + prov.label + "…");
+		}
+	}
+	catch (e) {
+		zscError(e);
+	}
+}
+
 function zscInitPrefPane(win) {
 	try {
 		let doc = win.document;
@@ -3461,6 +3605,15 @@ function zscInitPrefPane(win) {
 			node.addEventListener("change", onChange);
 			node.addEventListener("input", onChange);
 			node.addEventListener("command", onChange);
+		}
+		// 切换 AI 服务后把面板导航到对应站点，否则要重启 Zotero 才生效
+		let provGroup = doc.querySelector('[data-zsc-pref="provider"]');
+		if (provGroup && !provGroup.__zscProvBound) {
+			provGroup.__zscProvBound = true;
+			provGroup.addEventListener("command", () => {
+				try { zscSwitchProvider(); }
+				catch (e) { zscError(e); }
+			});
 		}
 		zscLog("pref pane bound: " + nodes.length + " controls");
 		zscBindZoomControls(win);

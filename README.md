@@ -1,6 +1,10 @@
-# Zotero ChatGPT Sidebar
+# Zotero AI Sidebar
 
-在 **Zotero 里直接使用网页版 ChatGPT** 的插件：
+在 **Zotero 里直接使用网页版 AI 对话（ChatGPT / DeepSeek）** 的插件：
+
+> **支持的服务**：ChatGPT（chatgpt.com）、DeepSeek（chat.deepseek.com）。
+> 在 `工具 → AI 侧边栏` 设置里用「AI 服务」单选项切换，切换后侧边栏会自动载入对应站点。
+> 两边的登录状态互相独立，各登录一次即可。
 
 - **右侧栏内嵌 chatgpt.com**，登录个人账号（Free / Plus 均可），登录状态随 Zotero 配置保存，重启不丢
 - **PDF / EPUB 划词 → 直接发到当前对话**：选中文字后弹窗多出「发送到 ChatGPT」按钮，选中的原文**原样**发进右侧栏里**当前打开的那个对话**——不加提示词、不新开对话、不跳回文库页面、不弹开阅读器左侧栏
@@ -19,12 +23,12 @@ Zotero 10 **不会自动加载**直接放进配置文件目录的插件，必须
 
 1. 打开 Zotero → 菜单 `工具 (Tools)` → `插件 (Add-ons)`
 2. 右上角**齿轮图标** → **Install Plugin From File…**
-3. 选择本目录下的 `dist/zotero-chatgpt-sidebar-1.6.2.xpi`（或从 Releases 页下载）
+3. 选择本目录下的 `dist/zotero-chatgpt-sidebar-1.7.0.xpi`（或从 Releases 页下载）
 4. 按提示**重启 Zotero**
 
 > 注意：不要用脚本把 xpi 复制到 `Profiles/.../extensions/` 来安装——实测 Zotero 10 完全忽略该目录下的新增插件（xpi 与解包目录都试过，`extensions.json` 里不会出现记录）。只有界面安装才会被接受。
 
-安装后到 `工具 → 插件` 里确认 **Zotero ChatGPT Sidebar 1.6.2** 已启用。
+安装后到 `工具 → 插件` 里确认 **Zotero AI Sidebar 1.7.0** 已启用。
 
 ## 自动更新
 

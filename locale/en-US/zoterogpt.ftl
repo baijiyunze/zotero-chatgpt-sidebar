@@ -3,17 +3,17 @@
 # collapsible-section's textContent, wiping its head/body children
 # (the whole panel vanishes). Verified on Zotero 10.
 zoterogpt-section-header =
-    .label = ChatGPT Sidebar
+    .label = AI Sidebar
 zoterogpt-section-sidenav =
-    .tooltiptext = ChatGPT
+    .tooltiptext = AI assistant
 zoterogpt-menu-summarize =
     .label = Summarize item with ChatGPT
 zoterogpt-menu-questions =
-    .label = Generate reading questions with ChatGPT
+    .label = Generate reading questions with AI
 zoterogpt-menu-send-pdf =
-    .label = Send this paper's PDF to the ChatGPT sidebar (stays on the page)
+    .label = Send this paper's PDF to the AI sidebar (stays on the page)
 zoterogpt-menu-open-tab =
-    .label = Open ChatGPT in a tab
+    .label = Open AI assistant in a tab
 # Tooltip for the 📎 button in the section header (bootstrap.js writes the
 # tooltiptext directly; kept here so Fluent never shows a bare key)
 zoterogpt-section-btn =

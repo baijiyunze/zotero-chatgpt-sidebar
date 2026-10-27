@@ -1,5 +1,18 @@
 # 更新日志 / Changelog
 
+## 1.7.0 — 支持 DeepSeek，一个插件两家通用
+
+- **新增 DeepSeek 支持**：设置里多出「AI 服务」单选项（ChatGPT / DeepSeek），
+  切换后侧边栏自动载入对应站点，不用重启
+- 两家的差异（网址、登录域名、输入框与发送按钮选择器、发送方式）抽成
+  `ZSC_PROVIDERS` 配置表，页面注入脚本按配置动态生成，只维护一份代码
+- DeepSeek 的输入框是普通 `textarea#chat-input` 但被 React 接管，写入走
+  原生 setter + `input` 事件；发送优先用回车（原生 Enter 发送），
+  按钮只认能明确识别的，避免误点「深度思考 / 联网搜索」开关
+- 「自定义网址」输入框移除，改为服务选择（网址随服务固定），避免切换服务后
+  网址残留在另一家上导致白屏
+- 插件更名为 **Zotero AI Sidebar**（addon id 不变，老用户可原地升级）
+
 ## 1.6.2 — 支持自动更新
 
 - 新增 `build.py`：一键打包 xpi 并生成 Zotero 自动更新用的 `update.json`

@@ -2,6 +2,7 @@
  * 这些值写入 default branch，用户在「设置 → ChatGPT 侧边栏」或 about:config 中修改后优先生效。
  */
 
+pref("extensions.zoterogpt.provider", "chatgpt");
 pref("extensions.zoterogpt.chatUrl", "https://chatgpt.com/");
 // current = 直接发进面板里当前打开的对话（推荐）；clipboard = 只复制到剪贴板
 pref("extensions.zoterogpt.sendMode", "current");
