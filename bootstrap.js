@@ -30,7 +30,7 @@ const XHTML_NS = "http://www.w3.org/1999/xhtml";
 
 // 图标 URL 统一加版本查询串：同 URL 重装插件时 Gecko 可能命中图片缓存（甚至
 // 缓存过失败的加载），带 ?v= 让每次发版都是新 URL，强制重新加载。
-const ZSC_ICONS_REV = "6";
+const ZSC_ICONS_REV = "7";
 function zscIconURL(name, rootURI) {
 	return (rootURI || ZSC.rootURI) + "content/icons/" + name + "?v=" + ZSC_ICONS_REV;
 }
@@ -182,19 +182,19 @@ const ZSC_STR = {
 		login: "去登录",
 		external: "浏览器打开",
 		tab: "标签页",
-		openPanel: "打开 ChatGPT 侧边栏",
+		openPanel: "打开 AI 侧边栏",
 		summary: "总结",
 		explain: "解释",
-		menuSummarize: "用 ChatGPT 总结所选文献",
-		menuQuestions: "用 ChatGPT 生成阅读问题",
-		menuOpen: "打开 ChatGPT 侧边栏",
-		sendToChat: "发送到 ChatGPT",
-		sent: "已发送到 ChatGPT 侧边栏",
+		menuSummarize: "用 AI 总结所选文献",
+		menuQuestions: "用 AI 生成阅读问题",
+		menuOpen: "打开 AI 侧边栏",
+		sendToChat: "发送到对话框",
+		sent: "已发送到对话框",
 		sentCurrent: "已发送到当前对话",
 		sentUnclear: "文字已放进输入框，但没确认发出——去侧边栏看一眼，必要时按回车",
 		sentNew: "已在新对话中发送",
-		noComposer: "没找到 ChatGPT 输入框（可能未登录或页面还没加载完）",
-		copied: "内容已复制，去 ChatGPT 输入框 Ctrl+V 粘贴即可",
+		noComposer: "没找到 AI 输入框（可能未登录或页面还没加载完）",
+		copied: "内容已复制，去侧边栏输入框 Ctrl+V 粘贴即可",
 		sentTruncated: "内容较长：已截断后发送，完整文本已复制到剪贴板",
 		zoomOut: "缩小",
 		zoomIn: "放大",
@@ -202,22 +202,22 @@ const ZSC_STR = {
 		sendPdf: "把这篇论文的 PDF 发到对话",
 		sendPdfBtn: "把当前论文的 PDF 送进这个对话（不切页）",
 		providerBtn: "选择 AI 服务（当前：%s）",
-		menuSendPdf: "把 PDF 发到 ChatGPT 侧边栏",
+		menuSendPdf: "把 PDF 发到 AI 侧边栏",
 		pdfNoPaper: "没找到可发送的 PDF：请在阅读器里打开一篇论文，或选中一条带 PDF 附件的文献",
 		pdfReading: "正在读取 PDF…",
 		pdfBusy: "上一次发送还在进行中，请等它完成…",
-		pdfUploading: "正在把 PDF 送进 ChatGPT…",
-		pdfWaitingPanel: "等待面板里的 ChatGPT 就绪…",
-		pdfNotReady: "面板里的 ChatGPT 还没就绪（未登录或页面还在加载），在面板里登录后再试一次",
+		pdfUploading: "正在把 PDF 送进对话…",
+		pdfWaitingPanel: "等待侧边栏就绪…",
+		pdfNotReady: "侧边栏还没就绪（未登录或页面还在加载），在面板里登录后再试一次",
 		pdfDone: "PDF 已放进输入框，按回车发送",
 		pdfDoneUnverified: "PDF 可能已放进输入框，看一眼有没有文件卡片",
 		pdfFailed: "PDF 发送失败",
 		noText: "没有取到选中的文本",
-		needLogin: "未检测到 ChatGPT 登录状态，点「去登录」",
-		loggedIn: "已登录 ChatGPT",
-		loadFail: "侧边栏内加载 ChatGPT 失败，可点「浏览器打开」",
-		loading: "正在加载 ChatGPT…",
-		ready: "ChatGPT",
+		needLogin: "未检测到登录状态，点「去登录」",
+		loggedIn: "已登录",
+		loadFail: "侧边栏内加载失败，可点「浏览器打开」",
+		loading: "正在加载…",
+		ready: "",
 	},
 	en: {
 		reload: "Reload",
@@ -225,19 +225,19 @@ const ZSC_STR = {
 		login: "Log in",
 		external: "Open in browser",
 		tab: "Tab",
-		openPanel: "Open ChatGPT sidebar",
+		openPanel: "Open AI sidebar",
 		summary: "Summarize",
 		explain: "Explain",
-		menuSummarize: "Summarize item with ChatGPT",
-		menuQuestions: "Generate reading questions with ChatGPT",
-		menuOpen: "Open ChatGPT sidebar",
-		sendToChat: "Send to ChatGPT",
-		sent: "Sent to the ChatGPT sidebar",
+		menuSummarize: "Summarize item with AI",
+		menuQuestions: "Generate reading questions with AI",
+		menuOpen: "Open AI sidebar",
+		sendToChat: "Send to sidebar",
+		sent: "Sent to the sidebar",
 		sentCurrent: "Sent to the current conversation",
 		sentUnclear: "Text is in the input box but sending wasn't confirmed — check the sidebar, press Enter if needed",
 		sentNew: "Sent as a new conversation",
-		noComposer: "ChatGPT input box not found (not signed in, or page still loading)",
-		copied: "Copied — paste into ChatGPT with Ctrl+V",
+		noComposer: "AI input box not found (not signed in, or page still loading)",
+		copied: "Copied — paste into the sidebar input box with Ctrl+V",
 		sentTruncated: "Long text: sent truncated, full text copied to clipboard",
 		zoomOut: "Zoom out",
 		zoomIn: "Zoom in",
@@ -245,22 +245,22 @@ const ZSC_STR = {
 		sendPdf: "Send this paper's PDF to the chat",
 		sendPdfBtn: "Send this paper's PDF into this conversation (without leaving the page)",
 		providerBtn: "Choose AI service (current: %s)",
-		menuSendPdf: "Send PDF to the ChatGPT sidebar",
+		menuSendPdf: "Send PDF to the AI sidebar",
 		pdfNoPaper: "No PDF found — open a paper in the reader, or select an item that has a PDF attachment",
 		pdfReading: "Reading PDF…",
 		pdfBusy: "Still sending the previous file — hang on…",
-		pdfUploading: "Sending the PDF to ChatGPT…",
-		pdfWaitingPanel: "Waiting for the ChatGPT panel…",
-		pdfNotReady: "The ChatGPT panel isn't ready yet (not signed in, or still loading). Sign in and try again.",
+		pdfUploading: "Sending the PDF into the chat…",
+		pdfWaitingPanel: "Waiting for the sidebar…",
+		pdfNotReady: "The sidebar isn't ready yet (not signed in, or still loading). Sign in and try again.",
 		pdfDone: "PDF placed — press Enter when the file card appears",
 		pdfDoneUnverified: "PDF probably placed — check for a file card",
 		pdfFailed: "Sending the PDF failed",
 		noText: "No selected text",
-		needLogin: "ChatGPT login not detected. Click \"Log in\".",
-		loggedIn: "Signed in to ChatGPT",
-		loadFail: "Failed to load ChatGPT inside the panel. Try \"Open in browser\".",
-		loading: "Loading ChatGPT…",
-		ready: "ChatGPT",
+		needLogin: "Login not detected. Click \"Log in\".",
+		loggedIn: "Signed in",
+		loadFail: "Failed to load the page inside the panel. Try \"Open in browser\".",
+		loading: "Loading…",
+		ready: "",
 	},
 };
 
@@ -2537,7 +2537,7 @@ function zscOpenTab(url) {
 	try {
 		let { id, container } = win.Zotero_Tabs.add({
 			type: ZSC_TAB_TYPE,
-			title: "ChatGPT",
+			title: zscProv().label,
 			select: true,
 		});
 		try {
@@ -2581,13 +2581,15 @@ function registerSection() {
 			pluginID: ZSC_ID,
 			header: {
 				l10nID: "zoterogpt-section-header",
-				icon: zscIconURL("section-16.svg"),
-				darkIcon: zscIconURL("section-16-dark.svg"),
+				// 注册时就用当前服务的图标：Zotero 重启后 sidenav / 标题图标
+				// 是按这里的值建的，写成静态图标会显得"没跟着 AI 切换"。
+				icon: zscProvIconURL(zscProv().id, false),
+				darkIcon: zscProvIconURL(zscProv().id, true),
 			},
 			sidenav: {
 				l10nID: "zoterogpt-section-sidenav",
-				icon: zscIconURL("section-20.svg"),
-				darkIcon: zscIconURL("section-20-dark.svg"),
+				icon: zscProvIconURL(zscProv().id, false, true),
+				darkIcon: zscProvIconURL(zscProv().id, true, true),
 			},
 			// section 标题栏右侧的 📎 按钮：不占面板高度，但"看得见、点得到"。
 			// 面板里的整行工具栏在 1.2.0 被要求移除过，所以入口只放这一个图标按钮。
@@ -2657,6 +2659,9 @@ function registerSection() {
 					zscLog("section init (paneID=" + (props && props.paneID) + ")");
 					// init 时 body 已存在，直接把面板挂上，不等 render 调度
 					zscOnRender(props);
+					// 每次重建（含重启 / 切标签页）都把 sidenav、标题图标刷成当前服务，
+					// 否则重启后侧边栏图标会停在注册时的静态值。
+					zscRefreshProviderUI();
 				}
 				catch (e) {
 					zscError(e);
@@ -3753,8 +3758,8 @@ function zscExplainInjectFailure(messages) {
 	let list = messages || [];
 	let zh = zscIsZh();
 	if (list.some(m => m.indexOf("no-window-global") === 0) || list.some(m => m.indexOf("detect-empty") === 0)) {
-		return zh ? "发送失败：面板里的 ChatGPT 页面还没就绪，稍等几秒再试（内容已复制）"
-			: "Failed: the ChatGPT page isn't ready yet — retry in a moment (copied)";
+		return zh ? "发送失败：侧边栏页面还没就绪，稍等几秒再试（内容已复制）"
+			: "Failed: the sidebar page isn't ready yet — retry in a moment (copied)";
 	}
 	if (list.some(m => m.indexOf("NO_COMPOSER") === 0)) {
 		return zscT("noComposer") + (zh ? "（内容已复制）" : " (copied)");
