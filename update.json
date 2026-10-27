@@ -45,6 +45,17 @@
               "strict_max_version": "10.*"
             }
           }
+        },
+        {
+          "version": "1.7.5",
+          "update_link": "https://github.com/baijiyunze/zotero-chatgpt-sidebar/releases/download/v1.7.5/zotero-chatgpt-sidebar-1.7.5.xpi",
+          "update_hash": "sha256:b5ec0e7ba0144db6d69454d9212e462086e626a90347d156d6dbf661bf6f22bc",
+          "applications": {
+            "zotero": {
+              "strict_min_version": "7.0",
+              "strict_max_version": "10.*"
+            }
+          }
         }
       ]
     }

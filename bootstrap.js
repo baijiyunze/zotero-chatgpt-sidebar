@@ -1494,6 +1494,12 @@ async function zscInjectIntoPage(text) {
 	if (!browser || !browser.browsingContext || !browser.browsingContext.currentWindowGlobal) {
 		return { ok: false, messages: ["no-window-global"] };
 	}
+	// PDF 正在注入时别抢输入框：两条链路并行会把还没附加完的文件随文字一起
+	// 发走——实测 DeepSeek 上提示语先被点击发送、输入框清空，PDF 卡片还没就位，
+	// 附加步骤最后只能报 ATTACHED_UNCHECKED，PDF 实际没发出去。
+	for (let i = 0; i < 60 && ZSC.pdfBusy; i++) {
+		await Zotero.Promise.delay(400);
+	}
 	let urlBefore = "";
 	try {
 		urlBefore = browser.currentURI && browser.currentURI.spec || "";
@@ -1557,16 +1563,221 @@ async function zscInjectIntoPage(text) {
 	if (dispatched && navigated) {
 		messages.push("NAVIGATED_AFTER_SEND");
 	}
+	// noWait 站点（DeepSeek）派发完就返回了，"发送键到底点没点对、消息出没出去"
+	// 页面里没法等。停 2.5 秒后用一次独立注入读输入框：空了 = 已发出；
+	// 还有内容 = 上一次发送没生效（很可能启发式点错了按钮），自动补一次回车再确认。
+	if (dispatched && zscProv().noWait) {
+		let probe = await zscVerifyAndRetrySend(browser);
+		if (probe && probe.length) {
+			messages = messages.concat(probe);
+		}
+	}
 	zscLog("inject: " + (messages.length ? messages.join(" | ") : "(no messages)")
 		+ " | url=" + (urlBefore || "-") + " -> " + (urlAfter || "-"));
 	// ok        = 发送动作已经派发出去（或输入框被清空确认发出）
 	// confirmed = 有确凿证据说明消息真的送出去了
 	let sentConfirmed = messages.some(m => m.indexOf("SENT_") === 0 && m.indexOf("UNCLEAR") === -1);
 	let ok = dispatched || messages.some(m => m.indexOf("SENT_") === 0);
-	// noWait 的站点（DeepSeek）在已有会话里发消息不会改 URL，没法靠跳转确认；
-	// 但"按钮已点/回车已发"就是它能给的最强保证，按已发送处理，别拿"没确认"去烦用户。
-	let confirmed = sentConfirmed || (dispatched && (navigated || !!zscProv().noWait));
+	// 回读验证的结果优先级最高：VERIFY_EMPTY / VERIFY_RETRY SENT 是"真的发出去了"，
+	// VERIFY_RETRY STILL 是补发回车后输入框还有字——这种情况就算 noWait 也得承认没发出去。
+	let verifyEmpty = messages.some(m =>
+		m.indexOf("VERIFY_EMPTY") === 0 || m.indexOf("VERIFY_RETRY SENT") === 0);
+	let verifyFailed = messages.some(m => m.indexOf("VERIFY_RETRY STILL") === 0);
+	let confirmed = sentConfirmed
+		|| (verifyEmpty && dispatched)
+		|| (dispatched && !verifyFailed && (navigated || !!zscProv().noWait));
 	return { ok: ok, confirmed: confirmed, messages: messages };
+}
+
+/**
+ * DeepSeek 专用的"发送回读验证 + 补救"。
+ *
+ * 发送按钮是按位置启发式认出来的（DeepSeek 的发送键没有 aria-label、class 是
+ * 随机哈希），点错了页面上不会有任何报错，消息就静静躺在输入框里。所以派发完
+ * 等 2.5 秒，用一次独立注入读输入框：
+ *   - 空      → 消息已发出（VERIFY_EMPTY）
+ *   - 有内容  → 上一次没发出去，补派发一次回车，再读一次（VERIFY_RETRY SENT/STILL）
+ * 若等待期间页面整页跳走（首页发第一条），新注入会绑到新页面——输入框是新的、
+ * 为空，同样判为"已发出"，与事实一致。
+ */
+/**
+ * 深探 1：只读输入框状态 + 顺带聚焦。有内容时返回 VERIFY_LEN，交给父进程
+ * 发"真实回车"（见 zscSendTrustedEnter）。
+ */
+function zscProbeLenCode() {
+	let prov = zscProv();
+	return zscTranslatorHeader("Zotero AI Sidebar - Send Verify 1").concat([
+		'function detectWeb(doc, url) { return "webpage"; }',
+		'',
+		'function doWeb(doc, url) {',
+		'	var say = function (m) { try { Zotero.debug("ZSC:" + m); } catch (e) {} };',
+		'	var COMPOSER_SEL = ' + JSON.stringify(prov.composer) + ';',
+		'	var isVisible = function (el) {',
+		'		try {',
+		'			var r = el.getBoundingClientRect();',
+		'			if (!r || r.width < 2 || r.height < 2) { return false; }',
+		'			return true;',
+		'		}',
+		'		catch (e) { return true; }',
+		'	};',
+		'	var findComposer = function () {',
+		'		for (var i = 0; i < COMPOSER_SEL.length; i++) {',
+		'			var list = [];',
+		'			try { list = Array.prototype.slice.call(doc.querySelectorAll(COMPOSER_SEL[i])); } catch (e) {}',
+		'			for (var j = 0; j < list.length; j++) {',
+		'				if (isVisible(list[j])) { return list[j]; }',
+		'			}',
+		'		}',
+		'		return null;',
+		'	};',
+		'	var textLen = function (ed) {',
+		'		try {',
+		'			if (typeof ed.value === "string") { return ed.value.length; }',
+		'			return String(ed.innerText || ed.textContent || "").length;',
+		'		}',
+		'		catch (e) { return -1; }',
+		'	};',
+		'	var ed = findComposer();',
+		'	if (!ed) { say("VERIFY no-composer url=" + url); return []; }',
+		'	var len = textLen(ed);',
+		'	if (len === 0) { say("VERIFY_EMPTY"); return []; }',
+		'	try { ed.focus(); } catch (e) {}',
+		'	say("VERIFY_LEN " + len);',
+		'	return [];',
+		'}',
+	]).join("\n");
+}
+
+/**
+ * 深探 2：再读一次。清空了 = 可信回车起效；还有字 = 可信回车也没用，
+ * 页内补一发合成回车做最后尝试（DeepSeek 若只认 keydown/keyup 之一，
+ * 三连发里总有一个能碰上），然后再读并如实上报。
+ */
+function zscProbeRetryCode() {
+	let prov = zscProv();
+	return zscTranslatorHeader("Zotero AI Sidebar - Send Verify 2").concat([
+		'function detectWeb(doc, url) { return "webpage"; }',
+		'',
+		'function doWeb(doc, url) {',
+		'	var say = function (m) { try { Zotero.debug("ZSC:" + m); } catch (e) {} };',
+		'	var W = doc.defaultView;',
+		'	var sleep = function (ms) { return new Promise(function (r) { W.setTimeout(r, ms); }); };',
+		'	var COMPOSER_SEL = ' + JSON.stringify(prov.composer) + ';',
+		'	var isVisible = function (el) {',
+		'		try {',
+		'			var r = el.getBoundingClientRect();',
+		'			if (!r || r.width < 2 || r.height < 2) { return false; }',
+		'			return true;',
+		'		}',
+		'		catch (e) { return true; }',
+		'	};',
+		'	var findComposer = function () {',
+		'		for (var i = 0; i < COMPOSER_SEL.length; i++) {',
+		'			var list = [];',
+		'			try { list = Array.prototype.slice.call(doc.querySelectorAll(COMPOSER_SEL[i])); } catch (e) {}',
+		'			for (var j = 0; j < list.length; j++) {',
+		'				if (isVisible(list[j])) { return list[j]; }',
+		'			}',
+		'		}',
+		'		return null;',
+		'	};',
+		'	var textLen = function (ed) {',
+		'		try {',
+		'			if (typeof ed.value === "string") { return ed.value.length; }',
+		'			return String(ed.innerText || ed.textContent || "").length;',
+		'		}',
+		'		catch (e) { return -1; }',
+		'	};',
+		'',
+		'	var main = async function () {',
+		'		var ed = findComposer();',
+		'		if (!ed) { say("VERIFY_RETRY no-composer url=" + url); return; }',
+		'		var len = textLen(ed);',
+		'		if (len === 0) { say("VERIFY_RETRY SENT"); return; }',
+		'		try { ed.focus(); } catch (e) {}',
+		'		var o = { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true, cancelable: true, composed: true };',
+		'		try {',
+		'			ed.dispatchEvent(new W.KeyboardEvent("keydown", o));',
+		'			ed.dispatchEvent(new W.KeyboardEvent("keypress", o));',
+		'			ed.dispatchEvent(new W.KeyboardEvent("keyup", o));',
+		'		}',
+		'		catch (e) { say("VERIFY_ENTER_ERR " + e); }',
+		'		await sleep(1500);',
+		'		var len2 = textLen(ed);',
+		'		say(len2 === 0 ? "VERIFY_RETRY SENT" : "VERIFY_RETRY STILL len=" + len2);',
+		'	};',
+		'',
+		'	return main().then(function () { return []; }, function (e) { say("VERIFY_ERR " + e); return []; });',
+		'}',
+	]).join("\n");
+}
+
+/**
+ * 从父进程发一次 isTrusted=true 的回车。
+ *
+ * 为什么必须它：手动按回车有效、插件发送没反应，差别就在事件可信度——
+ * 页面里 new KeyboardEvent 造出来的是合成事件（isTrusted=false），
+ * DeepSeek 的发送处理可能不认；Zotero 是特权代码，windowUtils.sendKeyEvent
+ * 发出的事件与物理键盘同级。前提是焦点在输入框上（probe 1 已聚焦）。
+ */
+function zscSendTrustedEnter(browser) {
+	try {
+		let wu = browser.windowUtils;
+		if (!wu) {
+			zscLog("trusted enter: no windowUtils");
+			return false;
+		}
+		// DOM_VK_RETURN = 13。keydown/keypress/keyup 三连，与真实按键一致。
+		wu.sendKeyEvent("keydown", 13, 0, 0, 0);
+		wu.sendKeyEvent("keypress", 13, 0, 0, 0);
+		wu.sendKeyEvent("keyup", 13, 0, 0, 0);
+		zscLog("trusted enter dispatched");
+		return true;
+	}
+	catch (e) {
+		zscLog("trusted enter failed: " + e);
+		return false;
+	}
+}
+
+async function zscRunVerifyProbe(browser, code) {
+	if (!browser || !browser.browsingContext || !browser.browsingContext.currentWindowGlobal) {
+		return ["VERIFY no-window-global"];
+	}
+	let session = await zscNewInjectSession(browser);
+	if (!session) {
+		return ["VERIFY no-session"];
+	}
+	session.label = "verify";
+	try {
+		return await zscSessionInject(session, code, 20000);
+	}
+	finally {
+		try {
+			session.remote.dispose();
+		}
+		catch (e) { /* ignore */ }
+	}
+}
+
+async function zscVerifyAndRetrySend(browser) {
+	try {
+		await Zotero.Promise.delay(2500);
+		let out = [];
+		let first = await zscRunVerifyProbe(browser, zscProbeLenCode());
+		out = out.concat(first);
+		// 输入框还有内容（VERIFY_LEN n）→ 真实回车 → 还不行页内补合成回车
+		if (first.some(m => m.indexOf("VERIFY_LEN") === 0)) {
+			zscSendTrustedEnter(browser);
+			await Zotero.Promise.delay(1500);
+			let second = await zscRunVerifyProbe(browser, zscProbeRetryCode());
+			out = out.concat(second);
+		}
+		return out;
+	}
+	catch (e) {
+		return ["VERIFY exc " + (e && e.message ? e.message : e)];
+	}
 }
 
 /* ------------------------------------------------------------------ */
@@ -2165,7 +2376,7 @@ async function zscSessionInject(session, code, timeoutMs) {
 		session.messages.push("PDF_STEP" + seq + " EXC " + (e && e.message ? e.message : e));
 	}
 	let out = session.messages.slice(start);
-	zscLog("pdf step " + seq + ": " + (out.join(" | ") || "(no messages)"));
+	zscLog((session.label || "pdf") + " step " + seq + ": " + (out.join(" | ") || "(no messages)"));
 	return out;
 }
 
