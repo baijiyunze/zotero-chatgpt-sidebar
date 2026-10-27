@@ -2588,8 +2588,10 @@ function registerSection() {
 			},
 			sidenav: {
 				l10nID: "zoterogpt-section-sidenav",
-				icon: zscProvIconURL(zscProv().id, false, true),
-				darkIcon: zscProvIconURL(zscProv().id, true, true),
+				// 侧边栏图标条这一格固定用中性图标：一排 Zotero 原生彩色小图标里
+				// 插一家服务的 logo 会显得突兀，切到哪家都一样。
+				icon: zscIconURL("ai-20.svg"),
+				darkIcon: zscIconURL("ai-20.svg"),
 			},
 			// section 标题栏右侧的 📎 按钮：不占面板高度，但"看得见、点得到"。
 			// 面板里的整行工具栏在 1.2.0 被要求移除过，所以入口只放这一个图标按钮。
@@ -3099,24 +3101,24 @@ function zscRefreshProviderUI() {
 					"--custom-section-icon-dark",
 					"url('" + zscProvIconURL(prov.id, true) + "')"
 				);
-				// 3) 记住新的 sidenav 选项，Zotero 重建按钮时用它
+				// 3) 记住 sidenav 选项（固定中性图标，不随服务变），Zotero 重建按钮时用它
 				try {
 					let opts = JSON.parse(sectionEl.dataset.sidenavOptions || "{}");
-					opts.icon = zscProvIconURL(prov.id, false, true);
-					opts.darkIcon = zscProvIconURL(prov.id, true, true);
+					opts.icon = zscIconURL("ai-20.svg");
+					opts.darkIcon = zscIconURL("ai-20.svg");
 					sectionEl.dataset.sidenavOptions = JSON.stringify(opts);
 				}
 				catch (e) { /* ignore */ }
 			}
-			// 4) 右侧图标条上的那一格
+			// 4) 右侧图标条上的那一格：固定中性图标，切 AI 不换
 			for (let btn of doc.querySelectorAll('.btn[data-pane="zoterogpt"]')) {
 				btn.style.setProperty(
 					"--custom-sidenav-icon-light",
-					"url('" + zscProvIconURL(prov.id, false, true) + "')"
+					"url('" + zscIconURL("ai-20.svg") + "')"
 				);
 				btn.style.setProperty(
 					"--custom-sidenav-icon-dark",
-					"url('" + zscProvIconURL(prov.id, true, true) + "')"
+					"url('" + zscIconURL("ai-20.svg") + "')"
 				);
 			}
 			// 5) 设置面板里的下拉框
