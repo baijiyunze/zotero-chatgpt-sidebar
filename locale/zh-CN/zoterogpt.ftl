@@ -23,3 +23,6 @@ zoterogpt-section-btn-zoomout =
     .tooltiptext = 缩小字体（−10%）
 zoterogpt-section-btn-zoomin =
     .tooltiptext = 放大字体（+10%）
+# 标题栏的 AI 选择按钮（图标 = 当前服务的 logo，点开是带图标的服务菜单）
+zoterogpt-section-btn-provider =
+    .tooltiptext = 选择 AI 服务（ChatGPT / DeepSeek）

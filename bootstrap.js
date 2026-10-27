@@ -30,7 +30,7 @@ const XHTML_NS = "http://www.w3.org/1999/xhtml";
 
 // 图标 URL 统一加版本查询串：同 URL 重装插件时 Gecko 可能命中图片缓存（甚至
 // 缓存过失败的加载），带 ?v= 让每次发版都是新 URL，强制重新加载。
-const ZSC_ICONS_REV = "5";
+const ZSC_ICONS_REV = "6";
 function zscIconURL(name, rootURI) {
 	return (rootURI || ZSC.rootURI) + "content/icons/" + name + "?v=" + ZSC_ICONS_REV;
 }
@@ -72,6 +72,11 @@ const ZSC_PROVIDERS = {
 			"button.composer-submit-button-color",
 		],
 		preferEnter: false,
+		// 图标文件（标题栏按钮 / 下拉菜单 / 侧栏图标随当前服务切换）
+		icon: "openai-16.svg",
+		darkIcon: "openai-16-dark.svg",
+		icon20: "openai-20.svg",
+		darkIcon20: "openai-20-dark.svg",
 	},
 	deepseek: {
 		id: "deepseek",
@@ -97,6 +102,10 @@ const ZSC_PROVIDERS = {
 			"button[aria-label*=\"Send\"]",
 		],
 		preferEnter: true,
+		icon: "deepseek-16.svg",
+		darkIcon: "deepseek-16-dark.svg",
+		icon20: "deepseek-20.svg",
+		darkIcon20: "deepseek-20-dark.svg",
 	},
 };
 
@@ -106,6 +115,20 @@ function zscProv() {
 	return Object.prototype.hasOwnProperty.call(ZSC_PROVIDERS, id)
 		? ZSC_PROVIDERS[id]
 		: ZSC_PROVIDERS.chatgpt;
+}
+
+/** 所有内置服务的 id 列表（下拉菜单按这个顺序展示） */
+function zscProviderIDs() {
+	return Object.keys(ZSC_PROVIDERS);
+}
+
+/** 服务图标 URL；small=false 用 20px 版本（下拉菜单 / 侧栏图标签） */
+function zscProvIconURL(provId, dark, small) {
+	let prov = ZSC_PROVIDERS[provId] || ZSC_PROVIDERS.chatgpt;
+	let name = small
+		? (dark ? prov.darkIcon20 : prov.icon20)
+		: (dark ? prov.darkIcon : prov.icon);
+	return zscIconURL(name);
 }
 
 /** host 是否属于给定域名列表（含子域） */
@@ -166,6 +189,7 @@ const ZSC_STR = {
 		zoomReset: "恢复 100%",
 		sendPdf: "把这篇论文的 PDF 发到对话",
 		sendPdfBtn: "把当前论文的 PDF 送进这个对话（不切页）",
+		providerBtn: "选择 AI 服务（当前：%s）",
 		menuSendPdf: "把 PDF 发到 ChatGPT 侧边栏",
 		pdfNoPaper: "没找到可发送的 PDF：请在阅读器里打开一篇论文，或选中一条带 PDF 附件的文献",
 		pdfReading: "正在读取 PDF…",
@@ -208,6 +232,7 @@ const ZSC_STR = {
 		zoomReset: "Reset to 100%",
 		sendPdf: "Send this paper's PDF to the chat",
 		sendPdfBtn: "Send this paper's PDF into this conversation (without leaving the page)",
+		providerBtn: "Choose AI service (current: %s)",
 		menuSendPdf: "Send PDF to the ChatGPT sidebar",
 		pdfNoPaper: "No PDF found — open a paper in the reader, or select an item that has a PDF attachment",
 		pdfReading: "Reading PDF…",
@@ -475,7 +500,7 @@ function zscToast(win, message) {
 			options.window = win;
 		}
 		let pw = new Zotero.ProgressWindow(options);
-		pw.changeHeadline("ChatGPT");
+		pw.changeHeadline(zscProv().label);
 		pw.addDescription(message);
 		pw.show();
 		pw.startCloseTimer(3500);
@@ -563,6 +588,10 @@ async function startup({ id, version, resourceURI, rootURI }, reason) {
 		windows: new WeakSet(),
 		panel: null,
 		mounts: 0,
+		// 上一次实际生效的服务 id：用来判断"真的换了"，避免重复导航
+		lastProvider: null,
+		// 打开中的 AI 服务下拉菜单 { el, doc, anchor, cleanup }
+		provMenu: null,
 		// 待注入"面板当前对话"的划词内容（面板还没就绪时暂存）
 		pendingPrompt: null,
 		// 待"新开对话"的提问，与 pendingPrompt 语义不同，别混用
@@ -579,6 +608,8 @@ async function startup({ id, version, resourceURI, rootURI }, reason) {
 		styleNodes: new Map(),
 		httpLogs: 0,
 	};
+	// 记录启动时实际生效的服务，后面用它判断"是否真的切换了"
+	ZSC.lastProvider = zscProv().id;
 
 	// 1. 右侧栏 section
 	registerSection();
@@ -641,6 +672,11 @@ function shutdown({ id, version, resourceURI, rootURI }, reason) {
 	}
 	try {
 		stopHttpObserver();
+	}
+	catch (e) { /* ignore */ }
+
+	try {
+		zscCloseProviderMenu();
 	}
 	catch (e) { /* ignore */ }
 
@@ -2429,6 +2465,22 @@ function registerSection() {
 			// 面板里的整行工具栏在 1.2.0 被要求移除过，所以入口只放这一个图标按钮。
 			sectionButtons: [
 				{
+					// AI 选择：图标随当前服务变化（ChatGPT 结形 / DeepSeek 小鲸鱼），
+					// 点一下弹出带图标的服务下拉菜单。
+					type: "zsc-provider",
+					icon: zscProvIconURL(zscProv().id, false),
+					darkIcon: zscProvIconURL(zscProv().id, true),
+					l10nID: "zoterogpt-section-btn-provider",
+					onClick: (props) => {
+						try {
+							zscOpenProviderMenu(props);
+						}
+						catch (e) {
+							zscError(e);
+						}
+					},
+				},
+				{
 					type: "zsc-zoom-out",
 					icon: zscIconURL("zoom-out-16.svg"),
 					darkIcon: zscIconURL("zoom-out-16-dark.svg"),
@@ -2762,6 +2814,353 @@ function zscSetSectionOpen(section, open) {
  * `section-button-<type>` 这套内置格式；我们这里直接把 data-l10n-id 摘掉、
  * 自己写 tooltiptext，免得依赖 FTL 时序（谁后写谁生效）。
  */
+/* ------------------------------------------------------------------ */
+/* AI 服务下拉菜单（标题栏图标按钮 → 带图标的选择菜单）                 */
+/* ------------------------------------------------------------------ */
+
+const ZSC_PROV_MENU_CSS = `
+.zsc-prov-menu {
+	position: fixed;
+	z-index: 2147483647;
+	min-width: 196px;
+	padding: 6px;
+	border-radius: 10px;
+	border: 1px solid rgba(0,0,0,.12);
+	background: #ffffff;
+	color: #16181d;
+	box-shadow: 0 10px 28px rgba(0,0,0,.22), 0 2px 6px rgba(0,0,0,.10);
+	font: 13px/1.35 system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+	-webkit-user-select: none;
+	user-select: none;
+}
+.zsc-prov-item {
+	display: flex;
+	align-items: center;
+	gap: 9px;
+	padding: 7px 9px;
+	border-radius: 7px;
+	cursor: pointer;
+}
+.zsc-prov-item:hover { background: rgba(77,107,254,.12); }
+.zsc-prov-item[data-current="true"] { background: rgba(77,107,254,.10); }
+.zsc-prov-item img { width: 18px; height: 18px; flex: 0 0 auto; }
+.zsc-prov-name { flex: 1 1 auto; white-space: nowrap; }
+.zsc-prov-item[data-current="true"] .zsc-prov-name { font-weight: 600; }
+.zsc-prov-check { flex: 0 0 auto; width: 12px; color: #4D6BFE; font-weight: 700; opacity: 0; }
+.zsc-prov-item[data-current="true"] .zsc-prov-check { opacity: 1; }
+.zsc-prov-sep { height: 1px; margin: 5px 7px; background: rgba(0,0,0,.10); }
+.zsc-prov-foot {
+	padding: 4px 9px 2px;
+	font-size: 11px;
+	line-height: 1.35;
+	color: #7a7f8a;
+	white-space: nowrap;
+}
+@media (prefers-color-scheme: dark) {
+	.zsc-prov-menu {
+		border-color: rgba(255,255,255,.14);
+		background: #2b2b2d;
+		color: #f2f2f4;
+		box-shadow: 0 10px 28px rgba(0,0,0,.55), 0 2px 6px rgba(0,0,0,.35);
+	}
+	.zsc-prov-item:hover { background: rgba(140,162,255,.20); }
+	.zsc-prov-item[data-current="true"] { background: rgba(140,162,255,.16); }
+	.zsc-prov-sep { background: rgba(255,255,255,.12); }
+	.zsc-prov-foot { color: #9aa0ad; }
+}
+`;
+
+function zscEnsureProvStyle(doc) {
+	try {
+		if (!doc || doc.getElementById("zsc-prov-style")) {
+			return;
+		}
+		let style = doc.createElementNS(XHTML_NS, "style");
+		style.id = "zsc-prov-style";
+		style.textContent = ZSC_PROV_MENU_CSS;
+		(doc.documentElement || doc.body).appendChild(style);
+	}
+	catch (e) { /* ignore */ }
+}
+
+/** 所有主窗口（多窗口时下拉菜单和图标都要同步） */
+function zscAllWindows() {
+	try {
+		let list = Zotero.getMainWindows ? Zotero.getMainWindows() : null;
+		if (list && list.length) {
+			return Array.from(list);
+		}
+	}
+	catch (e) { /* ignore */ }
+	try {
+		let win = Zotero.getMainWindow();
+		return win ? [win] : [];
+	}
+	catch (e) {
+		return [];
+	}
+}
+
+function zscWindowIsDark(win) {
+	try {
+		return !!win.matchMedia("(prefers-color-scheme: dark)").matches;
+	}
+	catch (e) {
+		return false;
+	}
+}
+
+/** 把当前服务的图标写到「某一个」section 的按钮和标题图标上 */
+function zscApplyProviderIcon(sectionEl) {
+	try {
+		if (!sectionEl) {
+			return;
+		}
+		let prov = zscProv();
+		let btn = sectionEl.querySelector(".section-custom-button.zsc-provider");
+		if (btn) {
+			btn.style.setProperty("--custom-button-icon-light", "url('" + zscProvIconURL(prov.id, false) + "')");
+			btn.style.setProperty("--custom-button-icon-dark", "url('" + zscProvIconURL(prov.id, true) + "')");
+			let tip = zscT("providerBtn").replace("%s", prov.label);
+			btn.removeAttribute("data-l10n-id");
+			btn.setAttribute("tooltiptext", tip);
+			btn.setAttribute("aria-label", tip);
+		}
+		// section 标题图标也跟着当前服务走（Fluent 重渲染后会被重置，所以每次都刷）
+		let sectionRoot = sectionEl.closest ? sectionEl.closest("item-pane-custom-section") : null;
+		if (sectionRoot) {
+			sectionRoot.style.setProperty(
+				"--custom-section-icon-light",
+				"url('" + zscProvIconURL(prov.id, false) + "')"
+			);
+			sectionRoot.style.setProperty(
+				"--custom-section-icon-dark",
+				"url('" + zscProvIconURL(prov.id, true) + "')"
+			);
+		}
+	}
+	catch (e) { /* ignore */ }
+}
+
+/** 切换服务后刷新所有窗口里的图标、标题图标、侧栏图标签和设置面板下拉 */
+function zscRefreshProviderUI() {
+	let prov = zscProv();
+	for (let win of zscAllWindows()) {
+		let doc = win && win.document;
+		if (!doc) {
+			continue;
+		}
+		try {
+			// 1) 面板标题栏按钮
+			for (let sectionEl of doc.querySelectorAll("item-pane-custom-section")) {
+				if (!String(sectionEl.dataset.pane || "").endsWith("zoterogpt")) {
+					continue;
+				}
+				zscApplyProviderIcon(sectionEl.querySelector("collapsible-section") || sectionEl);
+				// 2) section 标题图标（CSS 变量直接挂在自定义元素上）
+				sectionEl.style.setProperty(
+					"--custom-section-icon-light",
+					"url('" + zscProvIconURL(prov.id, false) + "')"
+				);
+				sectionEl.style.setProperty(
+					"--custom-section-icon-dark",
+					"url('" + zscProvIconURL(prov.id, true) + "')"
+				);
+				// 3) 记住新的 sidenav 选项，Zotero 重建按钮时用它
+				try {
+					let opts = JSON.parse(sectionEl.dataset.sidenavOptions || "{}");
+					opts.icon = zscProvIconURL(prov.id, false, true);
+					opts.darkIcon = zscProvIconURL(prov.id, true, true);
+					sectionEl.dataset.sidenavOptions = JSON.stringify(opts);
+				}
+				catch (e) { /* ignore */ }
+			}
+			// 4) 右侧图标条上的那一格
+			for (let btn of doc.querySelectorAll('.btn[data-pane="zoterogpt"]')) {
+				btn.style.setProperty(
+					"--custom-sidenav-icon-light",
+					"url('" + zscProvIconURL(prov.id, false, true) + "')"
+				);
+				btn.style.setProperty(
+					"--custom-sidenav-icon-dark",
+					"url('" + zscProvIconURL(prov.id, true, true) + "')"
+				);
+			}
+			// 5) 设置面板里的下拉框
+			let sel = doc.getElementById("zsc-pref-provider");
+			if (sel && String(sel.value || "") !== prov.id) {
+				sel.value = prov.id;
+			}
+		}
+		catch (e) { /* 单个窗口失败不影响其他窗口 */ }
+	}
+}
+
+function zscCloseProviderMenu() {
+	let st = ZSC && ZSC.provMenu;
+	if (!st) {
+		return;
+	}
+	ZSC.provMenu = null;
+	try { st.cleanup(); }
+	catch (e) { /* ignore */ }
+	try { st.el.remove(); }
+	catch (e) { /* ignore */ }
+	try { st.doc.getElementById("zsc-prov-anchor-active")?.removeAttribute("id"); }
+	catch (e) { /* ignore */ }
+}
+
+/** 点标题栏的服务图标：弹出带 logo 的服务选择菜单 */
+function zscOpenProviderMenu(props) {
+	let ev = props && props.event;
+	let btn = (ev && ev.detail && ev.detail.button) || null;
+	if (!btn && ev && ev.target && ev.target.querySelector) {
+		btn = ev.target.querySelector(".section-custom-button.zsc-provider");
+	}
+	let doc = (props && props.doc) || (btn && btn.ownerDocument) || null;
+	if (!doc) {
+		try { doc = Zotero.getMainWindow().document; }
+		catch (e) { return; }
+	}
+	// 同一个按钮再点一次 = 收起
+	if (ZSC.provMenu) {
+		let same = ZSC.provMenu.anchor === btn;
+		zscCloseProviderMenu();
+		if (same) {
+			return;
+		}
+	}
+	zscEnsureProvStyle(doc);
+	zscLog("provider menu: open (current=" + zscProv().id + ")");
+
+	let dark = zscWindowIsDark(doc.defaultView);
+	let current = zscProv().id;
+	let menu = doc.createElementNS(XHTML_NS, "div");
+	menu.className = "zsc-prov-menu";
+	menu.setAttribute("role", "menu");
+
+	for (let id of zscProviderIDs()) {
+		let prov = ZSC_PROVIDERS[id];
+		let item = doc.createElementNS(XHTML_NS, "div");
+		item.className = "zsc-prov-item";
+		item.dataset.prov = id;
+		item.setAttribute("role", "menuitem");
+		item.setAttribute("tabindex", "0");
+		if (id === current) {
+			item.dataset.current = "true";
+		}
+		let img = doc.createElementNS(XHTML_NS, "img");
+		img.setAttribute("src", zscProvIconURL(id, dark));
+		img.setAttribute("alt", "");
+		let name = doc.createElementNS(XHTML_NS, "span");
+		name.className = "zsc-prov-name";
+		name.textContent = prov.label;
+		let check = doc.createElementNS(XHTML_NS, "span");
+		check.className = "zsc-prov-check";
+		check.textContent = "✓";
+		item.appendChild(img);
+		item.appendChild(name);
+		item.appendChild(check);
+		item.addEventListener("click", (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			zscSetProvider(id);
+		});
+		item.addEventListener("keydown", (e) => {
+			if (e.key === "Enter" || e.key === " ") {
+				e.preventDefault();
+				zscSetProvider(id);
+			}
+		});
+		menu.appendChild(item);
+	}
+
+	let sep = doc.createElementNS(XHTML_NS, "div");
+	sep.className = "zsc-prov-sep";
+	menu.appendChild(sep);
+	let foot = doc.createElementNS(XHTML_NS, "div");
+	foot.className = "zsc-prov-foot";
+	foot.textContent = zscIsZh() ? "切换后自动载入对应站点" : "Loads that site on switch";
+	menu.appendChild(foot);
+
+	(doc.documentElement || doc.body).appendChild(menu);
+
+	// 定位在按钮左下方；下方空间不够就翻到上方
+	let rect = btn && btn.getBoundingClientRect ? btn.getBoundingClientRect() : null;
+	let box = menu.getBoundingClientRect();
+	let vw = doc.defaultView.innerWidth || 1000;
+	let vh = doc.defaultView.innerHeight || 800;
+	let left = rect ? rect.left : (vw - box.width - 24);
+	let top = rect ? rect.bottom + 6 : 80;
+	if (left + box.width > vw - 8) {
+		left = Math.max(8, vw - box.width - 8);
+	}
+	if (top + box.height > vh - 8) {
+		top = rect ? Math.max(8, rect.top - box.height - 6) : Math.max(8, vh - box.height - 8);
+	}
+	menu.style.left = Math.round(left) + "px";
+	menu.style.top = Math.round(top) + "px";
+
+	// 关闭条件：点空白处 / Esc / 滚动 / 窗口尺寸变化 / 切换标签
+	let win = doc.defaultView;
+	let onDown = (e) => {
+		if (!menu.contains(e.target)) {
+			zscCloseProviderMenu();
+		}
+	};
+	let onKey = (e) => {
+		if (e.key === "Escape") {
+			zscCloseProviderMenu();
+		}
+	};
+	let onClose = () => zscCloseProviderMenu();
+	// 刚展开 section 时 Zotero 可能会滚动一下，菜单别被自己关掉
+	let armed = false;
+	let armTimer = win.setTimeout(() => { armed = true; }, 300);
+	let onScroll = () => {
+		if (armed) {
+			zscCloseProviderMenu();
+		}
+	};
+	let cleanup = () => {
+		try { win.clearTimeout(armTimer); } catch (e) { /* ignore */ }
+		try { win.removeEventListener("mousedown", onDown, true); } catch (e) { /* ignore */ }
+		try { win.removeEventListener("keydown", onKey, true); } catch (e) { /* ignore */ }
+		try { win.removeEventListener("resize", onClose, true); } catch (e) { /* ignore */ }
+		try { win.removeEventListener("scroll", onScroll, true); } catch (e) { /* ignore */ }
+		try { win.removeEventListener("deactivate", onClose, true); } catch (e) { /* ignore */ }
+	};
+	win.addEventListener("mousedown", onDown, true);
+	win.addEventListener("keydown", onKey, true);
+	win.addEventListener("resize", onClose, true);
+	win.addEventListener("scroll", onScroll, true);
+	// 窗口切走时收起。注意不能用 blur：blur 会从按钮等子元素冒到窗口（捕获阶段），
+	// 菜单刚打开就自己关掉了。
+	win.addEventListener("deactivate", onClose, true);
+
+	ZSC.provMenu = { el: menu, doc, anchor: btn, cleanup };
+}
+
+/** 切换 AI 服务：写偏好 → 刷新图标 → 面板载入对应站点 */
+function zscSetProvider(id) {
+	if (!Object.prototype.hasOwnProperty.call(ZSC_PROVIDERS, id)) {
+		return;
+	}
+	// 用 lastProvider 而不是读偏好判断"是否切换"：设置面板的通用绑定可能已经先写了偏好，
+	// 读偏好会得到新值，导致误判成"没变"而跳过导航。
+	let prev = ZSC.lastProvider || null;
+	zscCloseProviderMenu();
+	zscSetPref("provider", id);
+	ZSC.lastProvider = id;
+	if (prev === id) {
+		zscRefreshProviderUI();
+		return;
+	}
+	zscLog("provider switched: " + prev + " -> " + id);
+	zscRefreshProviderUI();
+	zscSwitchProvider();
+}
+
 function zscDecorateSectionButtons(sectionEl) {
 	try {
 		if (!sectionEl) {
@@ -2781,6 +3180,8 @@ function zscDecorateSectionButtons(sectionEl) {
 			btn.setAttribute("tooltiptext", map[type]);
 			btn.setAttribute("aria-label", map[type]);
 		}
+		// AI 服务按钮的图标/tooltip 要跟着当前服务走（按钮会被 Zotero 重建，每次渲染都刷一次）
+		zscApplyProviderIcon(sectionEl);
 	}
 	catch (e) { /* ignore */ }
 }
@@ -3607,13 +4008,20 @@ function zscInitPrefPane(win) {
 			node.addEventListener("command", onChange);
 		}
 		// 切换 AI 服务后把面板导航到对应站点，否则要重启 Zotero 才生效
-		let provGroup = doc.querySelector('[data-zsc-pref="provider"]');
-		if (provGroup && !provGroup.__zscProvBound) {
-			provGroup.__zscProvBound = true;
-			provGroup.addEventListener("command", () => {
-				try { zscSwitchProvider(); }
-				catch (e) { zscError(e); }
-			});
+		let provCtrl = doc.querySelector('[data-zsc-pref="provider"]');
+		if (provCtrl && !provCtrl.__zscProvBound) {
+			provCtrl.__zscProvBound = true;
+			let apply = () => {
+				try {
+					zscSetProvider(String(provCtrl.value || ""));
+				}
+				catch (e) {
+					zscError(e);
+				}
+			};
+			// HTML <select> 走 change，XUL 控件走 command，两个都绑
+			provCtrl.addEventListener("command", apply);
+			provCtrl.addEventListener("change", apply);
 		}
 		zscLog("pref pane bound: " + nodes.length + " controls");
 		zscBindZoomControls(win);

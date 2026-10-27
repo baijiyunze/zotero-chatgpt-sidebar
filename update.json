@@ -3,20 +3,9 @@
     "zoterogpt-sidebar@workbuddy.local": {
       "updates": [
         {
-          "version": "1.6.2",
-          "update_link": "https://github.com/baijiyunze/zotero-chatgpt-sidebar/releases/download/v1.6.2/zotero-chatgpt-sidebar-1.6.2.xpi",
-          "update_hash": "sha256:c4bdbc9f22378412b655c0188549204a561194f7a1147fb6721f6a1ca9aac9ba",
-          "applications": {
-            "zotero": {
-              "strict_min_version": "7.0",
-              "strict_max_version": "10.*"
-            }
-          }
-        },
-        {
-          "version": "1.7.0",
-          "update_link": "https://github.com/baijiyunze/zotero-chatgpt-sidebar/releases/download/v1.7.0/zotero-chatgpt-sidebar-1.7.0.xpi",
-          "update_hash": "sha256:3a75e2734569eb0238a6d39c6d9ecb5362d6f6eaeab30efe2882a8df200b305a",
+          "version": "1.7.1",
+          "update_link": "https://github.com/baijiyunze/zotero-chatgpt-sidebar/releases/download/v1.7.1/zotero-chatgpt-sidebar-1.7.1.xpi",
+          "update_hash": "sha256:3496f32deba7ed2e48fcc071c8e5d4d5030e166db7a3ad48609402c6a2e45e8e",
           "applications": {
             "zotero": {
               "strict_min_version": "7.0",

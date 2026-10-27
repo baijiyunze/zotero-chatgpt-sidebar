@@ -1,8 +1,8 @@
 <vbox id="zoterogpt-prefpane" xmlns:html="http://www.w3.org/1999/xhtml" onload="Zotero.ZoteroChatGPTSidebar &amp;&amp; Zotero.ZoteroChatGPTSidebar.initPrefPane(window)">
 
 	<groupbox>
-		<label><html:h2>ChatGPT 侧边栏 / ChatGPT Sidebar</html:h2></label>
-		<description>在 Zotero 右侧栏内嵌 ChatGPT 网页版。在 PDF 里划词后点「发送到 ChatGPT」，选中的文字会直接发到面板里当前打开的对话里；点插件面板标题栏的纸飞机按钮，可把当前论文的 PDF 送进对话，全程不离开论文页。</description>
+		<label><html:h2>AI 侧边栏 / AI Sidebar</html:h2></label>
+		<description>在 Zotero 右侧栏内嵌网页版 AI 对话（ChatGPT / DeepSeek）。在 PDF 里划词后点「发送到 AI」，选中的文字会直接发到面板里当前打开的对话；点插件面板标题栏的纸飞机按钮，可把当前论文的 PDF 送进对话，全程不离开论文页。</description>
 	</groupbox>
 
 	<groupbox>
@@ -10,14 +10,14 @@
 
 		<hbox align="center">
 			<label value="AI 服务 / Provider" control="zsc-pref-provider"/>
-			<radiogroup id="zsc-pref-provider" orient="horizontal"
+			<html:select id="zsc-pref-provider" style="min-width: 9em;"
 				data-zsc-pref="provider" data-zsc-type="string"
 				preference="extensions.zoterogpt.provider">
-				<radio label="ChatGPT" value="chatgpt"/>
-				<radio label="DeepSeek" value="deepseek"/>
-			</radiogroup>
+				<html:option value="chatgpt">ChatGPT</html:option>
+				<html:option value="deepseek">DeepSeek</html:option>
+			</html:select>
 		</hbox>
-		<description>切换后侧边栏会自动载入对应站点。两边的登录状态互相独立，各登录一次即可，都会记住。</description>
+		<description>也可以直接点面板标题栏上那个 AI 图标（会显示当前服务的 logo），在弹出的菜单里按图标选择，切换后侧边栏立刻载入对应站点。两边的登录状态互相独立，各登录一次即可，都会记住。</description>
 
 		<hbox align="center">
 			<label value="面板高度(px) / Height" control="zsc-pref-panelHeight"/>

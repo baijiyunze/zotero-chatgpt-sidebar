@@ -23,3 +23,6 @@ zoterogpt-section-btn-zoomout =
     .tooltiptext = Smaller text (−10%)
 zoterogpt-section-btn-zoomin =
     .tooltiptext = Larger text (+10%)
+# AI picker button in the section header (icon = current service logo)
+zoterogpt-section-btn-provider =
+    .tooltiptext = Choose AI service (ChatGPT / DeepSeek)
