@@ -30,7 +30,7 @@ const XHTML_NS = "http://www.w3.org/1999/xhtml";
 
 // 图标 URL 统一加版本查询串：同 URL 重装插件时 Gecko 可能命中图片缓存（甚至
 // 缓存过失败的加载），带 ?v= 让每次发版都是新 URL，强制重新加载。
-const ZSC_ICONS_REV = "4";
+const ZSC_ICONS_REV = "5";
 function zscIconURL(name, rootURI) {
 	return (rootURI || ZSC.rootURI) + "content/icons/" + name + "?v=" + ZSC_ICONS_REV;
 }

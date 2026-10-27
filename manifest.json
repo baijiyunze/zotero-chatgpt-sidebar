@@ -6,8 +6,8 @@
 	"author": "WorkBuddy",
 	"homepage_url": "https://github.com/",
 	"icons": {
-		"48": "content/icons/icon-48.png",
-		"96": "content/icons/icon-96.png"
+		"48": "content/icons/deepseek-48.svg",
+		"96": "content/icons/deepseek-96.svg"
 	},
 	"applications": {
 		"zotero": {
