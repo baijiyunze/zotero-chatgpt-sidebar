@@ -1,5 +1,28 @@
 # 更新日志 / Changelog
 
+## 1.7.2 — 修复 DeepSeek 模式下发送失效
+
+**现象**：DeepSeek 模式下点发送，文字已经进了输入框，但状态栏报"发送失败"，
+内容还会被复制到剪贴板；PDF 附件上传成功后同样卡在最后一步。
+
+**根因**：DeepSeek 在首页发出第一条消息时会整页跳到 `/a/chat/s/...`，
+页面 window global 一换，Zotero 用来注入脚本的 translator actor 就被销毁。
+原来的发送逻辑派发回车后还要 `await sleep(500)` 再检查输入框清空，
+这个 await 正好跨在页面跳转上，于是 `translate()` 以
+`Actor 'Translation' destroyed before query 'translate' was resolved` 被 reject，
+被插件当成"没发出去"。
+
+**修法**：
+- DeepSeek 走"派发即返回"：点按钮或派发回车后立刻 return，不再 await。
+  是否真发出去改由父进程看 URL 是否跳到会话页来确认
+- 发送按钮不再只靠 aria-label 猜：新增位置启发式——在输入框附近容器里找
+  "最靠右下、尺寸像图标按钮"的那个，并硬性限定在输入框中线右侧，
+  把左侧的「深度思考 / 联网搜索 / 上传」开关挡在外面
+- 输入框查找加了可见性过滤，隐藏的 textarea 不会再被误选
+- 日志新增 `SEND_BTN` / `DISPATCHED_BUTTON|ENTER` / `NAVIGATED_AFTER_SEND`，
+  下次再出问题一看日志就知道卡在哪一步
+- 顺带修好了 1.7.1 在 DeepSeek 下 `TRY_ENTER` 之后必然报错的老问题
+
 ## 1.7.1 — AI 选择改成图标下拉菜单
 
 - **面板标题栏新增 AI 选择按钮**：按钮图标就是当前服务的 logo（ChatGPT 结形 / DeepSeek 小鲸鱼），

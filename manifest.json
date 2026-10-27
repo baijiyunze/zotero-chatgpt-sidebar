@@ -1,7 +1,7 @@
 {
 	"manifest_version": 2,
 	"name": "Zotero AI Sidebar",
-	"version": "1.7.1",
+	"version": "1.7.2",
 	"description": "在 Zotero 右侧栏内嵌 ChatGPT / DeepSeek 网页版，可随时切换：划词直接把选中文字送进当前对话，点面板标题栏的纸飞机按钮把当前论文 PDF 送进对话（不切页），条目一键提问。",
 	"author": "WorkBuddy",
 	"homepage_url": "https://github.com/",

@@ -90,8 +90,16 @@ const ZSC_PROVIDERS = {
 		],
 		cookieHost: "chat.deepseek.com",
 		sessionCookie: "token|session|auth|user|ds_|login",
-		// DeepSeek 输入框是普通 textarea，但被 React 接管，写入必须走原生 setter
-		composer: ["#chat-input", "textarea#chat-input", "textarea"],
+		// DeepSeek 输入框是普通 textarea，但被 React 接管，写入必须走原生 setter。
+		// 新版页面已经去掉了 id（日志里显示 id=-），所以 textarea 兜底是主路径，
+		// 末尾再挂 contenteditable / role=textbox，防止它哪天改成富文本框。
+		composer: [
+			"#chat-input",
+			"textarea#chat-input",
+			"textarea",
+			"div[contenteditable=\"true\"]",
+			"[role=\"textbox\"]",
+		],
 		// 发送按钮只认能明确识别的，找不到就交给回车；
 		// 页面上还有「深度思考 / 联网搜索」等开关，绝不能用 div[role=button] 兜底乱点。
 		send: [
@@ -102,6 +110,10 @@ const ZSC_PROVIDERS = {
 			"button[aria-label*=\"Send\"]",
 		],
 		preferEnter: true,
+		// DeepSeek 在首页发出第一条消息时会整页跳到 /a/chat/s/...，页面 window global
+		// 一换，Zotero 注入用的 translator actor 就被销毁。所以它必须"派发完就返回"，
+		// 不能等结果——否则 translate() 一定以 Actor destroyed 报失败。
+		noWait: true,
 		icon: "deepseek-16.svg",
 		darkIcon: "deepseek-16-dark.svg",
 		icon20: "deepseek-20.svg",
@@ -1090,11 +1102,30 @@ function zscInjectCode(text) {
 		'	var COMPOSER_SEL = ' + JSON.stringify(prov.composer) + ';',
 		'	var SEND_SEL = ' + JSON.stringify(prov.send) + ';',
 		'	var PREFER_ENTER = ' + JSON.stringify(!!prov.preferEnter) + ';',
+		// noWait：派发完发送动作就返回，不等结果。DeepSeek 必须这样——
+		// 它在首页发出第一条消息时会整页跳到 /a/chat/s/...，window global 一换，
+		// Zotero 的 translator actor 立刻销毁，任何还在挂起的 await 都会以
+		// "Actor 'Translation' destroyed" 被 reject，于是被误判成发送失败。
+		'	var NO_WAIT = ' + JSON.stringify(!!prov.noWait) + ';',
+		'',
+		'	var isVisible = function (el) {',
+		'		try {',
+		'			var r = el.getBoundingClientRect();',
+		'			if (!r || r.width < 2 || r.height < 2) { return false; }',
+		'			var st = W.getComputedStyle(el);',
+		'			if (st && (st.visibility === "hidden" || st.display === "none" || st.opacity === "0")) { return false; }',
+		'			return true;',
+		'		}',
+		'		catch (e) { return true; }',
+		'	};',
 		'',
 		'	var findComposer = function () {',
 		'		for (var i = 0; i < COMPOSER_SEL.length; i++) {',
-		'			var el = doc.querySelector(COMPOSER_SEL[i]);',
-		'			if (el) { return el; }',
+		'			var list = [];',
+		'			try { list = Array.prototype.slice.call(doc.querySelectorAll(COMPOSER_SEL[i])); } catch (e) {}',
+		'			for (var j = 0; j < list.length; j++) {',
+		'				if (isVisible(list[j])) { return list[j]; }',
+		'			}',
 		'		}',
 		'		return null;',
 		'	};',
@@ -1109,6 +1140,59 @@ function zscInjectCode(text) {
 		'				if (String(el.getAttribute("aria-disabled") || "") === "true") { continue; }',
 		'				return el;',
 		'			}',
+		'		}',
+		'		return null;',
+		'	};',
+		'',
+		'	var usable = function (b) {',
+		'		if (!b) { return false; }',
+		'		try { return !(b.disabled || String(b.getAttribute("aria-disabled") || "") === "true"); }',
+		'		catch (e) { return true; }',
+		'	};',
+		'',
+		// 发送键位置启发式：DeepSeek 的发送按钮没有 aria-label、class 是随机哈希，
+		// 只能靠"在输入框附近的容器里、尺寸像图标按钮、位置最靠右下"来认。
+		// 必须排掉「深度思考 / 联网搜索 / 上传附件」这些开关——误点它们会改掉对话设置。
+		'	var BAD_LABEL = ["深度思考", "联网搜索", "上传", "附件", "语音", "文件", "思考", "搜索"];',
+		'	var labelBad = function (b) {',
+		'		var s = "";',
+		'		try { s = String(b.getAttribute("aria-label") || "") + " " + String(b.textContent || "") + " " + String(b.getAttribute("title") || ""); }',
+		'		catch (e) { return false; }',
+		'		for (var i = 0; i < BAD_LABEL.length; i++) {',
+		'			if (s.indexOf(BAD_LABEL[i]) !== -1) { return true; }',
+		'		}',
+		'		return false;',
+		'	};',
+		'	var findSendNear = function (ed, strict) {',
+		'		var cr = null;',
+		'		try { cr = ed.getBoundingClientRect(); } catch (e) {}',
+		// 严格模式只认输入框中线右侧的按钮：DeepSeek 把「深度思考 / 联网搜索 / 上传」
+		// 摆在工具栏左边，发送键在最右边，用这条线把功能开关挡掉，避免点错开关。
+		'		var minLeft = (strict && cr) ? (cr.left + cr.width * 0.5) : -1e9;',
+		'		var box = ed;',
+		'		for (var up = 0; up < 6; up++) {',
+		'			box = box && box.parentElement;',
+		'			if (!box) { break; }',
+		'			var list = [];',
+		'			try { list = Array.prototype.slice.call(box.querySelectorAll(\'button, [role="button"], [type="submit"]\')); }',
+		'			catch (e) { list = []; }',
+		'			var best = null, bestScore = -1e15;',
+		'			for (var i = 0; i < list.length; i++) {',
+		'				var b = list[i];',
+		'				if (b === ed) { continue; }',
+		'				if (b.contains && b.contains(ed)) { continue; }',
+		'				if (labelBad(b)) { continue; }',
+		'				var r = null;',
+		'				try { r = b.getBoundingClientRect(); } catch (e) { continue; }',
+		'				if (!r || r.width < 8 || r.height < 8 || r.width > 140 || r.height > 140) { continue; }',
+		'				if (r.left < minLeft) { continue; }',
+		'				var lab = "";',
+		'				try { lab = String(b.getAttribute("aria-label") || "") + " " + String(b.getAttribute("type") || ""); } catch (e) {}',
+		// 位置权重：越靠右、越靠下越像发送键。right 权重大于 top，因为工具栏是横向一排。
+		'				var score = r.left + r.top * 0.3 + (/submit|send|发送/i.test(lab) ? 900 : 0) + (usable(b) ? 0 : -4000);',
+		'				if (score > bestScore) { bestScore = score; best = b; }',
+		'			}',
+		'			if (best) { return best; }',
 		'		}',
 		'		return null;',
 		'	};',
@@ -1177,16 +1261,18 @@ function zscInjectCode(text) {
 		'		catch (e) { say("EDITABLE_ERR " + e); return false; }',
 		'	};',
 		'',
-		'	var pressEnter = async function (ed) {',
-		'		var o = { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true, cancelable: true };',
+		// 只负责"把回车派发出去"，不等结果——等待会把本次注入拖进页面导航，
+		// 导致 translator actor 被销毁（见 NO_WAIT 注释）。是否真的发出去由
+		// 父进程侧看 URL 变化 / 输入框是否清空来判断。
+		'	var pressEnter = function (ed) {',
+		'		var o = { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true, cancelable: true, composed: true };',
 		'		try {',
 		'			ed.dispatchEvent(new W.KeyboardEvent("keydown", o));',
 		'			ed.dispatchEvent(new W.KeyboardEvent("keypress", o));',
 		'			ed.dispatchEvent(new W.KeyboardEvent("keyup", o));',
+		'			return true;',
 		'		}',
-		'		catch (e) { say("ENTER_ERR " + e); }',
-		'		await sleep(500);',
-		'		return String(val(ed)).length === 0;',
+		'		catch (e) { say("ENTER_ERR " + e); return false; }',
 		'	};',
 		'',
 		'	var main = async function () {',
@@ -1214,6 +1300,27 @@ function zscInjectCode(text) {
 		'		}',
 		'		say("INSERTED len=" + payload.length);',
 		'',
+		'		if (NO_WAIT) {',
+		'			// 快路径：找按钮 → 点它；按钮不可用就回车。派发完立刻返回，不 await。',
+		'			var nb = findSend();',
+		'			if (!usable(nb)) { nb = findSendNear(ed, true); }',
+		'			if (!usable(nb)) { nb = findSendNear(ed, false); }',
+		'			if (!usable(nb)) { nb = null; }',
+		'			var how = "";',
+		'			if (nb) {',
+		'				try {',
+		'					say("SEND_BTN " + nb.tagName + " aria=" + (nb.getAttribute("aria-label") || "-"));',
+		'					nb.click();',
+		'					how = "BUTTON";',
+		'				}',
+		'				catch (e) { say("CLICK_ERR " + e); }',
+		'			}',
+		'			if (!how && pressEnter(ed)) { how = "ENTER"; }',
+		'			if (!how) { say("DISPATCH_FAILED btn=" + (nb ? "y" : "n")); return; }',
+		'			say("DISPATCHED_" + how);',
+		'			return;',
+		'		}',
+		'',
 		'		// 等 React 把状态刷完、发送按钮从禁用变可用',
 		'		var btn = null;',
 		'		for (var i = 0; i < 30; i++) {',
@@ -1224,7 +1331,7 @@ function zscInjectCode(text) {
 		'',
 		'		if (PREFER_ENTER) {',
 		'			say("TRY_ENTER");',
-		'			if (await pressEnter(ed)) { say("SENT_ENTER"); return; }',
+		'			if (pressEnter(ed)) { say("SENT_ENTER"); return; }',
 		'		}',
 		'		if (btn) {',
 		'			try {',
@@ -1244,7 +1351,7 @@ function zscInjectCode(text) {
 		'			return;',
 		'		}',
 		'		try {',
-		'			if (await pressEnter(ed)) { say("SENT_ENTER"); return; }',
+		'			if (pressEnter(ed)) { say("SENT_ENTER"); return; }',
 		'			say("SENT_ENTER_UNCLEAR len=" + String(val(ed)).length);',
 		'		}',
 		'		catch (e) { say("ENTER_ERR " + e); }',
@@ -1387,6 +1494,11 @@ async function zscInjectIntoPage(text) {
 	if (!browser || !browser.browsingContext || !browser.browsingContext.currentWindowGlobal) {
 		return { ok: false, messages: ["no-window-global"] };
 	}
+	let urlBefore = "";
+	try {
+		urlBefore = browser.currentURI && browser.currentURI.spec || "";
+	}
+	catch (e) { /* ignore */ }
 	let messages = [];
 	let remote = null;
 	try {
@@ -1433,11 +1545,27 @@ async function zscInjectIntoPage(text) {
 		}
 		catch (e) { /* ignore */ }
 	}
-	zscLog("inject: " + (messages.length ? messages.join(" | ") : "(no messages)"));
-	// ok        = 文字确实写进了输入框（包含 SENT_*_UNCLEAR：内容在框里，只是没确认发出）
-	// confirmed = 输入框被清空，说明消息真的送出去了
-	let ok = messages.some(m => m.indexOf("SENT_") === 0);
-	let confirmed = messages.some(m => m.indexOf("SENT_") === 0 && m.indexOf("UNCLEAR") === -1);
+	let urlAfter = "";
+	try {
+		urlAfter = browser.currentURI && browser.currentURI.spec || "";
+	}
+	catch (e) { /* ignore */ }
+	// 页内已经派发发送动作、随后页面整页跳走（DeepSeek 首页发第一条就是这种），
+	// actor 会被销毁并让 translate() reject。这属于"动作已生效"，不是失败。
+	let dispatched = messages.some(m => m.indexOf("DISPATCHED_") === 0);
+	let navigated = !!(urlBefore && urlAfter && urlBefore !== urlAfter);
+	if (dispatched && navigated) {
+		messages.push("NAVIGATED_AFTER_SEND");
+	}
+	zscLog("inject: " + (messages.length ? messages.join(" | ") : "(no messages)")
+		+ " | url=" + (urlBefore || "-") + " -> " + (urlAfter || "-"));
+	// ok        = 发送动作已经派发出去（或输入框被清空确认发出）
+	// confirmed = 有确凿证据说明消息真的送出去了
+	let sentConfirmed = messages.some(m => m.indexOf("SENT_") === 0 && m.indexOf("UNCLEAR") === -1);
+	let ok = dispatched || messages.some(m => m.indexOf("SENT_") === 0);
+	// noWait 的站点（DeepSeek）在已有会话里发消息不会改 URL，没法靠跳转确认；
+	// 但"按钮已点/回车已发"就是它能给的最强保证，按已发送处理，别拿"没确认"去烦用户。
+	let confirmed = sentConfirmed || (dispatched && (navigated || !!zscProv().noWait));
 	return { ok: ok, confirmed: confirmed, messages: messages };
 }
 
